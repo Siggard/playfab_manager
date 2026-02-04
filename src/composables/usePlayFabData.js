@@ -107,7 +107,7 @@ export function usePlayFabData() {
       ItemClass: newEntity.ItemClass,
       CatalogVersion: state.catalogData?.CatalogVersion || 'Main',
       DisplayName: newEntity.DisplayName || '',
-      Description: null,
+      Description: newEntity.Description || null,
       VirtualCurrencyPrices: null,
       RealCurrencyPrices: null,
       Tags: newEntity.Tags || null,
@@ -118,7 +118,7 @@ export function usePlayFabData() {
         UsagePeriodGroup: null
       },
       Container: null,
-      Bundle: null,
+      Bundle: newEntity.Bundle || null,
       CanBecomeCharacter: false,
       IsStackable: false,
       IsTradable: false,
@@ -130,6 +130,12 @@ export function usePlayFabData() {
 
     state.entities.push(entity)
     state.itemClasses.add(entity.ItemClass)
+
+    // If it's a bundle, add to bundles list
+    if (entity.Bundle) {
+      state.bundles.push(entity)
+      state.bundleClasses.add(entity.ItemClass)
+    }
 
     return entity
   }
@@ -146,7 +152,9 @@ export function usePlayFabData() {
       feature_player: 'feature_player_',
       feature_staff: 'feature_staff_',
       feature_tactic: 'feature_tactic_',
-      feature_tactic_slot: 'feature_tactic_slot_'
+      feature_tactic_slot: 'feature_tactic_slot_',
+      bot_bonus: 'bot_bonus_',
+      bot_bonus_deck: 'bot_bonus_deck_'
     }
 
     const prefix = prefixes[itemClass] || `${itemClass}_`

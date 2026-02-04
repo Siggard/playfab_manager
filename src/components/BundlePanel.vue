@@ -1,5 +1,5 @@
 <template>
-  <div class="bundle-panel" :class="{ 'drag-over': isDragOver }">
+  <div class="bundle-panel" :class="panelClasses">
     <div
       class="bundle-header"
       :style="{ borderTopColor: typeColor }"
@@ -11,6 +11,7 @@
         <span class="bundle-name" :title="bundle.DisplayName">
           {{ bundle.DisplayName || 'Unnamed Bundle' }}
         </span>
+        <span v-if="isDeck" class="deck-count">{{ stats.itemCount }} cards</span>
         <button class="focus-btn" @click.stop="$emit('focus', bundle)" title="Open full view">
           ↗
         </button>
@@ -19,7 +20,7 @@
       <div class="bundle-description">{{ bundle.Description || '' }}</div>
     </div>
 
-    <div class="bundle-stats">
+    <div v-if="isClub" class="bundle-stats">
       <div class="stat-item" data-tooltip="Total Power">
         <span class="stat-label">⚡</span>
         <span class="stat-value">{{ stats.totalPower }}</span>
@@ -60,7 +61,7 @@
       </div>
     </div>
 
-    <div class="bundle-footer">
+    <div v-if="isClub" class="bundle-footer">
       <div class="type-counts">
         <div v-if="stats.playerCount" class="stat-item" data-tooltip="Players">
           <span class="stat-label">⚽</span>
@@ -112,6 +113,15 @@ const isDragOver = ref(false)
 const typeIcon = computed(() => getTypeIcon(props.bundle.ItemClass))
 const typeColor = computed(() => getTypeColor(props.bundle.ItemClass))
 
+const isClub = computed(() => props.bundle.ItemClass === 'club')
+const isDeck = computed(() => props.bundle.ItemClass.endsWith('_deck'))
+
+const panelClasses = computed(() => ({
+  'drag-over': isDragOver.value,
+  'layout-club': isClub.value,
+  'layout-deck': isDeck.value
+}))
+
 const stats = computed(() => getBundleStats(props.bundle.ItemId))
 
 // Two-way binding for draggable
@@ -150,6 +160,46 @@ function handleChange(evt) {
 
 .bundle-panel.drag-over {
   box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* Deck layout - full width, horizontal cards */
+.bundle-panel.layout-deck {
+  grid-column: 1 / -1;
+  height: fit-content;
+}
+
+.bundle-panel.layout-deck .bundle-content {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 8px 10px;
+}
+
+.bundle-panel.layout-deck .draggable-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 70px;
+}
+
+.bundle-panel.layout-deck .draggable-area > * {
+  min-width: 180px;
+  max-width: 220px;
+  flex-shrink: 0;
+}
+
+.bundle-panel.layout-deck .bundle-header {
+  padding: 8px 12px;
+}
+
+.bundle-panel.layout-deck .bundle-description {
+  height: auto;
+  -webkit-line-clamp: 1;
+}
+
+.bundle-panel.layout-deck .empty-drop {
+  min-width: 180px;
+  height: 60px;
 }
 
 .bundle-header {
@@ -200,6 +250,15 @@ function handleChange(evt) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deck-count {
+  font-size: 12px;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
 }
 
 .bundle-id {

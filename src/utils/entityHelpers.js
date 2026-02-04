@@ -9,7 +9,9 @@ export const typeIcons = {
   feature_player: '⭐',
   feature_staff: '⭐',
   feature_tactic: '⭐',
-  feature_tactic_slot: '🎯'
+  feature_tactic_slot: '🎯',
+  bot_bonus: '🃏',
+  bot_bonus_deck: '🎴'
 }
 
 // Color mapping for entity types
@@ -23,7 +25,9 @@ export const typeColors = {
   feature_player: '#6366F1', // indigo
   feature_staff: '#14B8A6',  // teal
   feature_tactic: '#A855F7', // violet
-  feature_tactic_slot: '#F97316' // orange
+  feature_tactic_slot: '#F97316', // orange
+  bot_bonus: '#06B6D4',     // cyan
+  bot_bonus_deck: '#0891B2' // darker cyan
 }
 
 // Get icon for entity type
@@ -54,33 +58,32 @@ export function formatCustomData(customDataString) {
   return JSON.stringify(data, null, 2)
 }
 
-// Parse positions from slot or player data
-function parsePositions(slotData) {
-  if (!slotData) return null
+// Parse positions from player data (new format: positions are just booleans)
+function parsePositions(data) {
+  if (!data) return null
   const positions = []
-  if (slotData.gk?.state === true || slotData.gk === true) positions.push('GK')
-  if (slotData.def?.state === true || slotData.def === true) positions.push('DEF')
-  if (slotData.mid?.state === true || slotData.mid === true) positions.push('MID')
-  if (slotData.att?.state === true || slotData.att === true) positions.push('ATT')
+  if (data.gk === true) positions.push('GK')
+  if (data.def === true) positions.push('DEF')
+  if (data.mid === true) positions.push('MID')
+  if (data.att === true) positions.push('ATT')
   return positions.length > 0 ? positions.join('/') : null
 }
 
-// Parse tactic slot with feature info
+// Parse tactic slot with feature info (new format: positions are booleans, features is array on slot level)
 function parseTacticSlot(slotData) {
   if (!slotData) return { pos: '', hasFeature: false }
   const positions = []
-  let hasFeature = false
 
   const posKeys = ['gk', 'def', 'mid', 'att']
   for (const key of posKeys) {
-    const posData = slotData[key]
-    if (posData?.state === true || posData === true) {
+    // New format: position is just true/false
+    if (slotData[key] === true) {
       positions.push(key.toUpperCase())
-      if (posData?.feature_id) {
-        hasFeature = true
-      }
     }
   }
+
+  // Features are now at slot level, not per-position
+  const hasFeature = Array.isArray(slotData.feature_ids) && slotData.feature_ids.length > 0
 
   return {
     pos: positions.join('/'),
@@ -96,18 +99,11 @@ export function getEntityDisplayInfo(entity) {
   // Parse positions from gk/def/mid/att fields (for players)
   const position = parsePositions(data)
 
-  // Parse player tags (tag_aggressive, tag_speed, etc.)
+  // Parse player tags (new format: tags is an array)
   let playerTags = null
   if (entity?.ItemClass === 'player') {
-    const tags = []
-    const tagPrefixes = ['tag_aggressive', 'tag_speed', 'tag_creative', 'tag_strategist', 'tag_cold_blooded']
-    tagPrefixes.forEach(key => {
-      if (data[key] === true || data[key] === 'true') {
-        tags.push(key.replace('tag_', ''))
-      }
-    })
-    if (tags.length > 0) {
-      playerTags = tags
+    if (Array.isArray(data.tags) && data.tags.length > 0) {
+      playerTags = data.tags
     }
   }
 
@@ -119,13 +115,9 @@ export function getEntityDisplayInfo(entity) {
       slots = data.slots.map(slot => parseTacticSlot(slot))
     }
 
-    // Extract active tactic styles
-    const styles = []
-    if (data.style_aggressive === true) styles.push('aggressive')
-    if (data.style_free_attack === true) styles.push('free_attack')
-    if (data.style_total_defence === true) styles.push('total_defence')
-    if (styles.length > 0) {
-      tacticStyles = styles
+    // Extract active tactic styles (new format: styles array)
+    if (Array.isArray(data.styles) && data.styles.length > 0) {
+      tacticStyles = data.styles
     }
   }
 
@@ -152,6 +144,20 @@ export function getEntityDisplayInfo(entity) {
   let upgradeable = null
   let requirementsDisplay = null
   let bonusMarksDisplay = null
+
+  // Parse bot_bonus data (new format: array of effects)
+  let bonusEffects = null
+  let bonusLevel = null
+  if (entity?.ItemClass === 'bot_bonus') {
+    if (Array.isArray(data) && data.length > 0) {
+      bonusEffects = data
+      bonusLevel = data[0].level
+    } else if (data.level !== undefined) {
+      // Old format fallback
+      bonusLevel = data.level
+      bonusEffects = [data]
+    }
+  }
 
   // Parse location data
   let actionDuration = null
@@ -192,7 +198,9 @@ export function getEntityDisplayInfo(entity) {
     upgradeable: upgradeable,
     actionDuration: actionDuration,
     requirementsDisplay: requirementsDisplay,
-    bonusMarksDisplay: bonusMarksDisplay
+    bonusMarksDisplay: bonusMarksDisplay,
+    bonusEffects: bonusEffects,
+    bonusLevel: bonusLevel
   }
 }
 

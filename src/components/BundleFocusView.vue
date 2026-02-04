@@ -18,17 +18,17 @@
             <span class="stat-label">Items:</span>
             <span class="stat-value">{{ itemCount }}</span>
           </span>
-          <span class="stat-item">
+          <span v-if="isClub" class="stat-item">
             <span class="stat-label">Power:</span>
             <span class="stat-value">{{ totalPower }}</span>
           </span>
-          <span v-if="balance > 0" class="stat-item">
+          <span v-if="isClub && balance > 0" class="stat-item">
             <span class="stat-label">Balance:</span>
             <span class="stat-value">{{ balance }}</span>
           </span>
         </div>
-        <!-- Infrastructure -->
-        <div v-if="infrastructure" class="infrastructure-row">
+        <!-- Infrastructure (club only) -->
+        <div v-if="isClub && infrastructure" class="infrastructure-row">
           <span
             v-for="(info, key) in infrastructure"
             :key="key"
@@ -242,6 +242,8 @@ const quickAddOnlyUnassigned = ref(true)
 const bundle = computed(() =>
   state.entities.find(e => e.ItemId === props.bundleId)
 )
+
+const isClub = computed(() => bundle.value?.ItemClass === 'club')
 
 // Get bundle items
 const bundleItemIds = computed(() =>

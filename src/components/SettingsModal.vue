@@ -174,12 +174,9 @@
               <div class="form-group">
                 <label>Item Class</label>
                 <select v-model="templateForm.data.ItemClass">
-                  <option value="player">player</option>
-                  <option value="staff">staff</option>
-                  <option value="team">team</option>
-                  <option value="tactic">tactic</option>
-                  <option value="club">club</option>
-                  <option value="location">location</option>
+                  <option v-for="itemClass in itemClasses" :key="itemClass" :value="itemClass">
+                    {{ itemClass }}
+                  </option>
                 </select>
               </div>
               <div class="form-group">
@@ -209,9 +206,9 @@
               <div class="form-group">
                 <label>Bundle Class</label>
                 <select v-model="templateForm.data.bundleClass">
-                  <option value="club">club</option>
-                  <option value="market_deck">market_deck</option>
-                  <option value="lootbox">lootbox</option>
+                  <option v-for="itemClass in bundleClasses" :key="itemClass" :value="itemClass">
+                    {{ itemClass }}
+                  </option>
                 </select>
               </div>
               <div class="form-group">
@@ -242,10 +239,10 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
-import { getTypeIcon } from '../utils/entityHelpers'
+import { getTypeIcon, typeIcons } from '../utils/entityHelpers'
 
 const emit = defineEmits(['close'])
 
@@ -261,6 +258,11 @@ const tabs = [
 ]
 
 const activeTab = ref('templates')
+
+// Get all item classes from typeIcons config
+const allClasses = computed(() => Object.keys(typeIcons))
+const bundleClasses = computed(() => allClasses.value.filter(c => c.endsWith('_deck') || c === 'club'))
+const itemClasses = computed(() => allClasses.value.filter(c => !c.endsWith('_deck')))
 
 // Template Editor State
 const showTemplateEditor = ref(false)

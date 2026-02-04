@@ -310,7 +310,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
-import { getTypeIcon, isValidJSON } from '../utils/entityHelpers'
+import { getTypeIcon, isValidJSON, typeIcons } from '../utils/entityHelpers'
 import ImageUploader from './ImageUploader.vue'
 import EntityCard from './EntityCard.vue'
 
@@ -339,7 +339,12 @@ const newTag = ref('')
 const selectedTemplate = ref(null)
 const showHelp = ref(false)
 
-const itemClasses = computed(() => Array.from(state.itemClasses).sort())
+// Merge classes from loaded data + config (typeIcons is the source of truth)
+const itemClasses = computed(() => {
+  const fromData = Array.from(state.itemClasses)
+  const fromConfig = Object.keys(typeIcons).filter(c => !c.endsWith('_deck'))
+  return [...new Set([...fromConfig, ...fromData])].sort()
+})
 const availableTemplates = computed(() => getItemTemplates())
 
 // Extract linked features from player's, tactic's or staff's CustomData
@@ -377,35 +382,34 @@ const linkedFeatures = computed(() => {
       }
       console.log('[LinkedFeatures] Total features found:', features.length)
     } else if (itemClass === 'tactic') {
-      // Tactic: general feature_id
-      if (data.feature_id) {
-        const featureEntity = state.entities.find(e => e.ItemId === data.feature_id)
-        if (featureEntity) {
-          features.push({
-            position: 'TACTIC',
-            entity: featureEntity
-          })
-        }
+      // Tactic: general feature_ids (array of features)
+      if (Array.isArray(data.feature_ids)) {
+        data.feature_ids.forEach((featureId, index) => {
+          const featureEntity = state.entities.find(e => e.ItemId === featureId)
+          if (featureEntity) {
+            features.push({
+              position: `TACTIC #${index + 1}`,
+              entity: featureEntity
+            })
+          }
+        })
       }
 
-      // Tactic: slot features in slots[index].{position}.feature_id
+      // Tactic: slot features in slots[index].feature_ids[]
       if (Array.isArray(data.slots)) {
-        const positionLabels = { gk: 'GK', def: 'DEF', mid: 'MID', att: 'ATT' }
-
         data.slots.forEach((slot, slotIndex) => {
           if (!slot || typeof slot !== 'object') return
 
-          for (const [pos, posData] of Object.entries(slot)) {
-            if (posData && posData.feature_id) {
-              const featureEntity = state.entities.find(e => e.ItemId === posData.feature_id)
+          if (Array.isArray(slot.feature_ids)) {
+            slot.feature_ids.forEach((featureId) => {
+              const featureEntity = state.entities.find(e => e.ItemId === featureId)
               if (featureEntity) {
-                const posLabel = positionLabels[pos] || pos.toUpperCase()
                 features.push({
-                  position: `#${slotIndex + 1} ${posLabel}`,
+                  position: `SLOT #${slotIndex + 1}`,
                   entity: featureEntity
                 })
               }
-            }
+            })
           }
         })
       }

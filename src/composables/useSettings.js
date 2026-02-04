@@ -71,6 +71,18 @@ const defaultSettings = {
         },
         IsStackable: false,
         IsTradable: false
+      },
+      bot_bonus: {
+        ItemClass: 'bot_bonus',
+        DisplayName: 'New Bot Bonus',
+        CustomData: {
+          level: 1,
+          effect_type: 'power',
+          effect_value: 2
+        },
+        Tags: [],
+        IsStackable: false,
+        IsTradable: false
       }
     },
     bundles: {
@@ -95,6 +107,17 @@ const defaultSettings = {
           staff: { count: 1, min: 1, max: 2, label: '1-2' },
           tactic: { count: 1, min: 1, max: 1, label: '1' },
           location: { min: 0, max: 5, label: 'optional' }
+        }
+      },
+      bot_bonus_deck: {
+        name: 'Bot Bonus Deck',
+        description: 'Deck of bonus cards for bot team',
+        bundleClass: 'bot_bonus_deck',
+        customData: {
+          difficulty: 1
+        },
+        itemRequirements: {
+          bot_bonus: { min: 1, max: 20, label: '1-20' }
         }
       }
     }

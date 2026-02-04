@@ -77,6 +77,11 @@
           class="tactic-style-tag"
         >{{ formatStyle(style) }}</span>
       </div>
+      <!-- Bot bonus effect -->
+      <div class="bot-bonus-effect" v-if="displayInfo.bonusLevel !== null">
+        <span class="bonus-level">Lv{{ displayInfo.bonusLevel }}</span>
+        <span v-if="displayInfo.bonusEffects" class="effect-count">{{ displayInfo.bonusEffects.length }} effect{{ displayInfo.bonusEffects.length > 1 ? 's' : '' }}</span>
+      </div>
       <!-- Tactic slots -->
       <div class="tactic-slots" v-if="displayInfo.slots">
         <span
@@ -131,7 +136,7 @@ function formatStyle(style) {
 }
 const hasStats = computed(() => {
   const info = displayInfo.value
-  return info.power || info.level || info.balance || info.position || info.salary || info.slots
+  return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null
 })
 
 const hasEntityErrors = computed(() => hasErrors(props.entity))
@@ -455,6 +460,28 @@ onUnmounted(() => {
 .bonus-text {
   color: #059669;
   font-weight: 500;
+}
+
+/* Bot bonus effect */
+.bot-bonus-effect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.bonus-level {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: #cffafe;
+  color: #0e7490;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.effect-count {
+  font-size: 10px;
+  color: #64748b;
 }
 
 .entity-tags {

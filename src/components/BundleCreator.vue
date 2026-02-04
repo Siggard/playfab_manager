@@ -27,27 +27,6 @@
           </div>
         </section>
 
-        <!-- Preview -->
-        <section v-if="selectedTemplate" class="creator-section">
-          <h3>Requirements Preview</h3>
-          <div class="requirements-preview">
-            <div
-              v-for="(req, itemClass) in currentTemplate.itemRequirements"
-              :key="itemClass"
-              class="requirement-row"
-            >
-              <span class="req-icon">{{ getTypeIcon(itemClass) }}</span>
-              <span class="req-class">{{ itemClass }}</span>
-              <span class="req-count">x{{ req.count }}</span>
-              <span v-if="req.filters" class="req-filters">
-                ({{ formatFilters(req.filters) }})
-              </span>
-              <span class="req-available" :class="{ warning: getAvailableCount(itemClass, req) < req.count }">
-                Available: {{ getAvailableCount(itemClass, req) }}
-              </span>
-            </div>
-          </div>
-        </section>
 
         <!-- Bundle Settings -->
         <section v-if="selectedTemplate" class="creator-section">
@@ -68,47 +47,6 @@
             <input v-model="bundleSettings.displayName" placeholder="Enter bundle name" />
           </div>
 
-          <div class="form-group">
-            <label>Selection Mode</label>
-            <div class="selection-modes">
-              <label class="mode-option">
-                <input type="radio" v-model="bundleSettings.selectionMode" value="random" />
-                <span class="mode-label">
-                  <strong>Random</strong>
-                  <small>Auto-select items matching requirements</small>
-                </span>
-              </label>
-              <label class="mode-option">
-                <input type="radio" v-model="bundleSettings.selectionMode" value="manual" />
-                <span class="mode-label">
-                  <strong>Manual</strong>
-                  <small>Create empty bundle, add items later</small>
-                </span>
-              </label>
-            </div>
-          </div>
-        </section>
-
-        <!-- Selected Items Preview (Random mode) -->
-        <section v-if="selectedTemplate && bundleSettings.selectionMode === 'random'" class="creator-section">
-          <h3>
-            Selected Items
-            <button type="button" @click="randomizeSelection" class="btn-randomize">
-              Randomize
-            </button>
-          </h3>
-          <div class="selected-items-preview">
-            <div v-if="selectedItems.length === 0" class="empty-selection">
-              Click "Randomize" to auto-select items
-            </div>
-            <div v-else class="selected-items-list">
-              <div v-for="item in selectedItems" :key="item.ItemId" class="selected-item">
-                <span class="item-icon">{{ getTypeIcon(item.ItemClass) }}</span>
-                <span class="item-name">{{ item.DisplayName || item.ItemId }}</span>
-                <span class="item-class">{{ item.ItemClass }}</span>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
 
@@ -143,16 +81,14 @@ import { getTypeIcon } from '../utils/entityHelpers'
 
 const emit = defineEmits(['close', 'created', 'created-and-edit'])
 
-const { state, createEntity, generateItemId, isEntityInBundle } = usePlayFabData()
+const { state, createEntity, generateItemId } = usePlayFabData()
 const { settings } = useSettings()
 
 const selectedTemplate = ref(null)
 const bundleSettings = ref({
   itemId: '',
-  displayName: '',
-  selectionMode: 'random'
+  displayName: ''
 })
-const selectedItems = ref([])
 
 const bundleTemplates = computed(() => settings.templates.bundles)
 
@@ -173,9 +109,6 @@ const canCreate = computed(() => {
   if (!selectedTemplate.value) return false
   if (idError.value) return false
   if (!bundleSettings.value.displayName) return false
-  if (bundleSettings.value.selectionMode === 'random' && selectedItems.value.length === 0) {
-    return false
-  }
   return true
 })
 
@@ -184,75 +117,11 @@ function selectTemplate(templateId) {
   const template = bundleTemplates.value[templateId]
   bundleSettings.value.displayName = template.name
   generateBundleId()
-  selectedItems.value = []
 }
 
 function generateBundleId() {
   if (!currentTemplate.value) return
   bundleSettings.value.itemId = generateItemId(currentTemplate.value.bundleClass)
-}
-
-function formatFilters(filters) {
-  return Object.entries(filters)
-    .map(([key, val]) => `${key} ${val}`)
-    .join(', ')
-}
-
-function getAvailableCount(itemClass, req) {
-  return getAvailableItems(itemClass, req.filters).length
-}
-
-function getAvailableItems(itemClass, filters = {}) {
-  return state.entities.filter(item => {
-    if (item.ItemClass !== itemClass) return false
-    if (item.Bundle !== null) return false
-    if (isEntityInBundle(item.ItemId)) return false
-
-    // Check filters
-    if (filters && Object.keys(filters).length > 0) {
-      try {
-        const data = JSON.parse(item.CustomData || '{}')
-        for (const [key, condition] of Object.entries(filters)) {
-          const value = data[key]
-          if (typeof condition === 'string') {
-            if (condition.startsWith('<=')) {
-              const threshold = parseInt(condition.substring(2))
-              if (parseInt(value) > threshold) return false
-            } else if (condition.startsWith('>=')) {
-              const threshold = parseInt(condition.substring(2))
-              if (parseInt(value) < threshold) return false
-            } else if (value !== condition) {
-              return false
-            }
-          }
-        }
-      } catch {
-        return false
-      }
-    }
-
-    return true
-  })
-}
-
-function randomSample(array, count) {
-  const shuffled = [...array].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, Math.min(count, array.length))
-}
-
-function randomizeSelection() {
-  if (!currentTemplate.value) return
-
-  const selected = []
-  const requirements = currentTemplate.value.itemRequirements || {}
-
-  for (const [itemClass, req] of Object.entries(requirements)) {
-    const available = getAvailableItems(itemClass, req.filters)
-    const picks = randomSample(available, req.count)
-    selected.push(...picks)
-  }
-
-  selectedItems.value = selected
 }
 
 function handleCreate(andEdit = false) {
@@ -269,9 +138,7 @@ function handleCreate(andEdit = false) {
     CustomData: template.customData ? JSON.stringify(template.customData) : null,
     Tags: [],
     Bundle: {
-      BundledItems: bundleSettings.value.selectionMode === 'random'
-        ? selectedItems.value.map(item => item.ItemId)
-        : [],
+      BundledItems: [],
       BundledResultTables: [],
       BundledVirtualCurrencies: template.virtualCurrencies || null
     },

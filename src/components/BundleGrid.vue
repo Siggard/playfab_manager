@@ -60,7 +60,7 @@ import { ref, computed } from 'vue'
 import BundlePanel from './BundlePanel.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useBundleStats } from '../composables/useBundleStats'
-import { getTypeIcon } from '../utils/entityHelpers'
+import { getTypeIcon, typeIcons } from '../utils/entityHelpers'
 
 const { state } = usePlayFabData()
 const { globalStats } = useBundleStats()
@@ -69,7 +69,12 @@ defineEmits(['edit', 'edit-bundle', 'focus'])
 
 const selectedBundleClass = ref('all')
 
-const bundleClasses = computed(() => Array.from(state.bundleClasses).sort())
+// Merge bundle classes from loaded data + config
+const bundleClasses = computed(() => {
+  const fromData = Array.from(state.bundleClasses)
+  const fromConfig = Object.keys(typeIcons).filter(c => c.endsWith('_deck') || c === 'club')
+  return [...new Set([...fromConfig, ...fromData])].sort()
+})
 
 const filteredBundles = computed(() => {
   if (selectedBundleClass.value === 'all') {
