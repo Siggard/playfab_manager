@@ -81,6 +81,25 @@
           </div>
         </div>
 
+        <!-- Assigned To (reverse references) -->
+        <div v-if="!isNew && assignedTo.length > 0" class="assigned-to-section">
+          <label>Assigned To</label>
+          <div class="assigned-to-list">
+            <div
+              v-for="(a, idx) in assignedTo"
+              :key="idx"
+              class="assigned-to-item"
+              :class="'ref-' + a.type"
+              @click="openLinkedFeature(a.entity)"
+            >
+              <span class="assigned-to-type">{{ assignmentTypeLabels[a.type] || a.type }}</span>
+              <span class="assigned-to-icon">{{ getTypeIcon(a.entity.ItemClass) }}</span>
+              <span class="assigned-to-name">{{ a.entity.DisplayName || a.entity.ItemId }}</span>
+              <span class="assigned-to-id">{{ a.entity.ItemId }}</span>
+            </div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Display Name</label>
           <input
@@ -138,6 +157,22 @@
           </div>
         </div>
 
+        <!-- Linked Debuffs (for players) -->
+        <div v-if="linkedDebuffs.length > 0" class="form-group linked-debuffs">
+          <label>Linked Debuffs</label>
+          <div class="features-list">
+            <div
+              v-for="link in linkedDebuffs"
+              :key="link.entity.ItemId"
+              class="feature-item"
+              @click="openLinkedFeature(link.entity)"
+            >
+              <span class="feature-position debuff">{{ link.position }}</span>
+              <EntityCard :entity="link.entity" />
+            </div>
+          </div>
+        </div>
+
         <!-- Image Upload -->
         <div class="form-group">
           <label>Image</label>
@@ -177,6 +212,14 @@
           class="btn btn-danger"
         >
           Delete
+        </button>
+        <button
+          v-if="!isNew"
+          @click="handleDuplicate"
+          class="btn btn-secondary"
+          title="Create a copy with a new ItemId (image not copied)"
+        >
+          Duplicate
         </button>
         <div class="spacer"></div>
         <button @click="$emit('close')" class="btn btn-secondary">
@@ -319,9 +362,9 @@ const props = defineProps({
   isNew: Boolean
 })
 
-const emit = defineEmits(['close', 'save', 'delete', 'open-linked'])
+const emit = defineEmits(['close', 'save', 'delete', 'open-linked', 'duplicate'])
 
-const { state, generateItemId, updateEntity, createEntity, deleteEntity } = usePlayFabData()
+const { state, generateItemId, updateEntity, createEntity, deleteEntity, getEntityAssignments } = usePlayFabData()
 const { getItemTemplates, getTemplate } = useSettings()
 const { generateImagePath, hasImage } = useImageManager()
 
@@ -359,28 +402,18 @@ const linkedFeatures = computed(() => {
     const features = []
 
     if (itemClass === 'player') {
-      // Player: features in position objects (gk, def, mid, att)
-      const positions = ['gk', 'def', 'mid', 'att']
-      const positionLabels = { gk: 'GK', def: 'DEF', mid: 'MID', att: 'ATT' }
-
-      console.log('[LinkedFeatures] Player CustomData:', data)
-
-      for (const pos of positions) {
-        const posData = data[pos]
-        console.log(`[LinkedFeatures] Position ${pos}:`, posData)
-        if (posData && posData.feature_id) {
-          console.log(`[LinkedFeatures] Looking for feature_id: "${posData.feature_id}"`)
-          const featureEntity = state.entities.find(e => e.ItemId === posData.feature_id)
-          console.log(`[LinkedFeatures] Found entity:`, featureEntity)
+      // Player: features in top-level feature_ids array
+      if (Array.isArray(data.feature_ids)) {
+        data.feature_ids.forEach((featureId, index) => {
+          const featureEntity = state.entities.find(e => e.ItemId === featureId)
           if (featureEntity) {
             features.push({
-              position: positionLabels[pos],
+              position: `FEATURE #${index + 1}`,
               entity: featureEntity
             })
           }
-        }
+        })
       }
-      console.log('[LinkedFeatures] Total features found:', features.length)
     } else if (itemClass === 'tactic') {
       // Tactic: general feature_ids (array of features)
       if (Array.isArray(data.feature_ids)) {
@@ -450,6 +483,47 @@ const linkedFeatures = computed(() => {
   }
 })
 
+const linkedDebuffs = computed(() => {
+  if (!props.entity || props.isNew) return []
+  if (props.entity.ItemClass !== 'player') return []
+
+  try {
+    const data = JSON.parse(props.entity.CustomData || '{}')
+    const debuffs = []
+
+    if (data.debuff_ids && typeof data.debuff_ids === 'object') {
+      Object.keys(data.debuff_ids).forEach((debuffId, index) => {
+        const debuffEntity = state.entities.find(e => e.ItemId === debuffId)
+        if (debuffEntity) {
+          debuffs.push({
+            position: `DEBUFF #${index + 1}`,
+            entity: debuffEntity
+          })
+        }
+      })
+    }
+
+    return debuffs
+  } catch {
+    return []
+  }
+})
+
+// Reverse references — who points to this entity
+const assignedTo = computed(() => {
+  if (!props.entity || props.isNew) return []
+  return getEntityAssignments(props.entity.ItemId)
+})
+
+const assignmentTypeLabels = {
+  bundle: 'Bundle',
+  feature_ref: 'Feature of',
+  slot_ref: 'Slot in',
+  debuff_ref: 'Debuff of',
+  mark_ref: 'Mark in',
+  tactic_ref: 'Tactic of'
+}
+
 function openLinkedFeature(entity) {
   emit('open-linked', entity)
 }
@@ -480,6 +554,10 @@ onMounted(async () => {
         form.imagePath = defaultPath
       }
     }
+  } else if (props.isNew && props.entity?.ItemClass) {
+    // Pre-select ItemClass when creating from Entity Browser
+    form.ItemClass = props.entity.ItemClass
+    form.ItemId = generateItemId(props.entity.ItemClass)
   }
 })
 
@@ -639,6 +717,33 @@ function handleDelete() {
     emit('delete')
     emit('close')
   }
+}
+
+function handleDuplicate() {
+  // Build CustomData from current form, stripping imagePath (image is not copied)
+  let customDataObj = {}
+  if (form.CustomData.trim()) {
+    try {
+      customDataObj = JSON.parse(form.CustomData)
+    } catch {}
+  }
+  delete customDataObj.imagePath
+  const customData = Object.keys(customDataObj).length > 0
+    ? JSON.stringify(customDataObj)
+    : null
+
+  const newId = generateItemId(form.ItemClass)
+  const created = createEntity({
+    ItemId: newId,
+    ItemClass: form.ItemClass,
+    DisplayName: form.DisplayName,
+    Description: form.Description,
+    CustomData: customData,
+    Tags: form.Tags.length > 0 ? [...form.Tags] : null
+  })
+
+  emit('duplicate', created)
+  emit('close')
 }
 </script>
 
@@ -1069,6 +1174,107 @@ function handleDelete() {
   color: #1d4ed8;
 }
 
+/* Assigned To section */
+.assigned-to-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.assigned-to-section label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.assigned-to-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assigned-to-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.assigned-to-item:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.assigned-to-type {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.assigned-to-item.ref-bundle .assigned-to-type {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.assigned-to-item.ref-feature_ref .assigned-to-type,
+.assigned-to-item.ref-slot_ref .assigned-to-type {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.assigned-to-item.ref-debuff_ref .assigned-to-type {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.assigned-to-item.ref-mark_ref .assigned-to-type {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.assigned-to-item.ref-tactic_ref .assigned-to-type {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.assigned-to-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.assigned-to-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.assigned-to-id {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Linked Features */
 .linked-features {
   margin-top: 20px;
@@ -1108,6 +1314,15 @@ function handleDelete() {
   border-radius: 4px;
   min-width: 36px;
   text-align: center;
+}
+
+.feature-position.debuff {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.linked-debuffs label {
+  color: #dc2626;
 }
 
 .feature-item :deep(.entity-card) {

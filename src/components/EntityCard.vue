@@ -15,14 +15,14 @@
         <span class="icon">{{ typeIcon }}</span>
         <span class="name" :title="entity.DisplayName">{{ entity.DisplayName || 'Unnamed' }}</span>
       </div>
-      <div class="entity-id">{{ entity.ItemId }}</div>
+      <div class="entity-id">{{ entity.ItemId }}<span v-if="hasFeatureIds" class="feature-dot" title="Has feature_ids">●</span><span v-if="hasDebuffIds" class="debuff-dot" title="Has debuff_ids">●</span></div>
       <!-- Feature tactic description -->
       <div v-if="entity.ItemClass === 'feature_tactic' && entity.Description" class="feature-description">
         {{ entity.Description }}
       </div>
       <div class="entity-stats" v-if="hasStats">
         <span v-if="displayInfo.power" class="stat">
-          <span class="stat-icon">⚡</span>{{ displayInfo.power }}<span v-if="displayInfo.powerLimit">/{{ displayInfo.powerLimit }}</span>
+          <span class="stat-icon">⚡</span>{{ displayInfo.power }}<span v-if="displayInfo.basePower"> ({{ displayInfo.basePower }})</span><span v-if="displayInfo.powerLimit">/{{ displayInfo.powerLimit }}</span>
         </span>
         <span v-if="displayInfo.level" class="stat">
           <span class="stat-icon">Lv</span>{{ displayInfo.level }}<span v-if="displayInfo.maxLevel">/{{ displayInfo.maxLevel }}</span>
@@ -108,7 +108,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { getTypeIcon, getTypeColor, getEntityDisplayInfo } from '../utils/entityHelpers'
+import { getTypeIcon, getTypeColor, getEntityDisplayInfo, parseCustomData } from '../utils/entityHelpers'
 import { useImageManager } from '../composables/useImageManager'
 import { useValidation } from '../composables/useValidation'
 
@@ -137,6 +137,26 @@ function formatStyle(style) {
 const hasStats = computed(() => {
   const info = displayInfo.value
   return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null
+})
+
+const hasFeatureIds = computed(() => {
+  const cls = props.entity.ItemClass
+  if (cls !== 'player' && cls !== 'tactic' && cls !== 'staff') return false
+  const raw = parseCustomData(props.entity.CustomData)
+  if (!raw) return false
+  if (cls === 'player' || cls === 'tactic') {
+    return Array.isArray(raw.feature_ids) && raw.feature_ids.length > 0
+  }
+  if (cls === 'staff') {
+    return Array.isArray(raw.marks) && raw.marks.some(m => m && m.feature_id)
+  }
+  return false
+})
+
+const hasDebuffIds = computed(() => {
+  if (props.entity.ItemClass !== 'player') return false
+  const raw = parseCustomData(props.entity.CustomData)
+  return raw && raw.debuff_ids && typeof raw.debuff_ids === 'object' && Object.keys(raw.debuff_ids).length > 0
 })
 
 const hasEntityErrors = computed(() => hasErrors(props.entity))
@@ -276,6 +296,18 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
+.feature-dot {
+  color: #3b82f6;
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.debuff-dot {
+  color: #dc2626;
+  margin-left: 4px;
+  font-size: 10px;
+}
+
 .feature-description {
   font-size: 11px;
   color: #64748b;
@@ -314,6 +346,7 @@ onUnmounted(() => {
 /* Tactic slots */
 .tactic-slots {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   margin-bottom: 4px;
 }
@@ -325,7 +358,7 @@ onUnmounted(() => {
   color: #1d4ed8;
   border-radius: 3px;
   font-weight: 500;
-  min-width: 14px;
+  white-space: nowrap;
   text-align: center;
 }
 

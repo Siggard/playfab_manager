@@ -36,7 +36,7 @@
       <label class="checkbox-filter">
         <input type="checkbox" v-model="showOnlyUnassigned" />
         <span>Show only unassigned</span>
-        <span class="unassigned-count">{{ unassignedEntities.length }}</span>
+        <span class="unassigned-count">{{ filteredUnassigned }}</span>
       </label>
     </div>
 
@@ -85,8 +85,8 @@
     </div>
 
     <div class="pool-stats">
-      <span>Total: {{ state.entities.length }}</span>
-      <span>Unassigned: {{ unassignedEntities.length }}</span>
+      <span>Total: {{ filteredTotal }}</span>
+      <span>Unassigned: {{ filteredUnassigned }}</span>
     </div>
   </div>
 </template>
@@ -148,6 +148,32 @@ const displayedEntities = computed(() => {
 
   return entities
 })
+
+// Apply type/search/tag filters (without unassigned toggle) for stats
+function applyFilters(entities) {
+  // Exclude bundles themselves
+  let result = entities.filter(e => !state.bundleClasses.has(e.ItemClass) || !e.Bundle?.BundledItems)
+
+  if (state.filters.type !== 'all') {
+    result = result.filter(e => e.ItemClass === state.filters.type)
+  }
+  if (state.filters.search) {
+    const search = state.filters.search.toLowerCase()
+    result = result.filter(e =>
+      e.DisplayName?.toLowerCase().includes(search) ||
+      e.ItemId.toLowerCase().includes(search)
+    )
+  }
+  if (state.filters.tag !== 'all') {
+    result = result.filter(e =>
+      e.Tags && Array.isArray(e.Tags) && e.Tags.includes(state.filters.tag)
+    )
+  }
+  return result
+}
+
+const filteredTotal = computed(() => applyFilters(state.entities).length)
+const filteredUnassigned = computed(() => applyFilters(unassignedEntities.value).length)
 
 // Computed for draggable v-model
 const dragList = computed({

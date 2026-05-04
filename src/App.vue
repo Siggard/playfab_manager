@@ -37,6 +37,9 @@
         </div>
       </div>
       <div class="header-right">
+        <button v-if="isLoaded" @click="enterBrowseMode" class="btn-header btn-browse" :class="{ active: viewMode === 'browse' }">
+          Entities
+        </button>
         <button v-if="isLoaded" @click="openBundleCreator" class="btn-header">
           + Bundle
         </button>
@@ -79,6 +82,14 @@
         @exit="exitFocusMode"
         @edit-bundle="openBundleEditor"
         @edit-item="openEditor"
+      />
+
+      <!-- Entity Browser View -->
+      <EntityBrowser
+        v-else-if="viewMode === 'browse'"
+        @edit="openEditor"
+        @create="openCreatorWithClass"
+        @back="exitBrowseMode"
       />
     </main>
 
@@ -133,6 +144,7 @@
       @save="handleSave"
       @delete="handleDelete"
       @open-linked="handleOpenLinked"
+      @duplicate="handleDuplicate"
     />
 
     <!-- Bundle Editor Modal -->
@@ -172,6 +184,7 @@ import BundleCreator from './components/BundleCreator.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import WarningsDashboard from './components/WarningsDashboard.vue'
 import BundleFocusView from './components/BundleFocusView.vue'
+import EntityBrowser from './components/EntityBrowser.vue'
 import { usePlayFabData } from './composables/usePlayFabData'
 import { useSettings } from './composables/useSettings'
 import { useHistory } from './composables/useHistory'
@@ -207,7 +220,7 @@ const bundleCreatorVisible = ref(false)
 const settingsVisible = ref(false)
 
 // Focus mode state
-const viewMode = ref('grid') // 'grid' | 'focus'
+const viewMode = ref('grid') // 'grid' | 'focus' | 'browse'
 const focusedBundleId = ref(null)
 
 // Auto-save restore dialog
@@ -254,6 +267,12 @@ function openCreator() {
   editorVisible.value = true
 }
 
+function openCreatorWithClass(itemClass) {
+  editingEntity.value = itemClass ? { ItemClass: itemClass } : null
+  isCreating.value = true
+  editorVisible.value = true
+}
+
 function closeEditor() {
   editorVisible.value = false
   editingEntity.value = null
@@ -271,6 +290,13 @@ function handleOpenLinked(entity) {
   // Close current editor and open the linked entity
   closeEditor()
   // Use nextTick to ensure the modal is closed before opening new one
+  setTimeout(() => {
+    openEditor(entity)
+  }, 50)
+}
+
+function handleDuplicate(entity) {
+  // Editor already emitted 'close'; open the freshly-created copy for review
   setTimeout(() => {
     openEditor(entity)
   }, 50)
@@ -348,6 +374,19 @@ function enterFocusMode(bundle) {
 function exitFocusMode() {
   viewMode.value = 'grid'
   focusedBundleId.value = null
+}
+
+// Browse mode functions
+function enterBrowseMode() {
+  if (viewMode.value === 'browse') {
+    viewMode.value = 'grid'
+  } else {
+    viewMode.value = 'browse'
+  }
+}
+
+function exitBrowseMode() {
+  viewMode.value = 'grid'
 }
 </script>
 
@@ -619,5 +658,10 @@ body {
 
 .btn-settings {
   padding: 8px 10px;
+}
+
+.btn-browse.active {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.5);
 }
 </style>

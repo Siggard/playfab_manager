@@ -11,7 +11,10 @@ export const typeIcons = {
   feature_tactic: '⭐',
   feature_tactic_slot: '🎯',
   bot_bonus: '🃏',
-  bot_bonus_deck: '🎴'
+  bot_bonus_deck: '🎴',
+  player_deck: '🂠',
+  debuff_player: '💀',
+  status_token: '🎫'
 }
 
 // Color mapping for entity types
@@ -27,7 +30,10 @@ export const typeColors = {
   feature_tactic: '#A855F7', // violet
   feature_tactic_slot: '#F97316', // orange
   bot_bonus: '#06B6D4',     // cyan
-  bot_bonus_deck: '#0891B2' // darker cyan
+  bot_bonus_deck: '#0891B2', // darker cyan
+  player_deck: '#2563EB',   // royal blue
+  debuff_player: '#DC2626',  // red
+  status_token: '#84CC16'    // lime
 }
 
 // Get icon for entity type
@@ -182,6 +188,7 @@ export function getEntityDisplayInfo(entity) {
 
   return {
     power: data.power,
+    basePower: data.base_power,
     powerLimit: data.power_limit,
     level: data.level,
     maxLevel: data.max_level,

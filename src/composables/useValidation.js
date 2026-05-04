@@ -83,7 +83,10 @@ const validationRules = [
         feature_tactic: /^feature_tactic_\d+$/,
         feature_tactic_slot: /^feature_tactic_slot_\d+$/,
         bot_bonus: /^bot_bonus_\d+$/,
-        bot_bonus_deck: /^bot_bonus_deck_\d+$/
+        bot_bonus_deck: /^bot_bonus_deck_\d+$/,
+        player_deck: /^player_deck_\d+$/,
+        debuff_player: /^debuff_player_\d+$/,
+        status_token: /^status_token_\d+$/
       }
 
       const pattern = patterns[item.ItemClass]

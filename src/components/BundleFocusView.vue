@@ -18,11 +18,7 @@
             <span class="stat-label">Items:</span>
             <span class="stat-value">{{ itemCount }}</span>
           </span>
-          <span v-if="isClub" class="stat-item">
-            <span class="stat-label">Power:</span>
-            <span class="stat-value">{{ totalPower }}</span>
-          </span>
-          <span v-if="isClub && balance > 0" class="stat-item">
+<span v-if="isClub && balance > 0" class="stat-item">
             <span class="stat-label">Balance:</span>
             <span class="stat-value">{{ balance }}</span>
           </span>

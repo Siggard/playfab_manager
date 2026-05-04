@@ -83,6 +83,18 @@ const defaultSettings = {
         Tags: [],
         IsStackable: false,
         IsTradable: false
+      },
+      status_token: {
+        ItemClass: 'status_token',
+        DisplayName: 'New Status Token',
+        Description: '',
+        CustomData: {
+          duration: { value: 1, unit: 'weeks' },
+          power_effect: { type: 'penalty', value: 1 }
+        },
+        Tags: [],
+        IsStackable: false,
+        IsTradable: false
       }
     },
     bundles: {
@@ -118,6 +130,17 @@ const defaultSettings = {
         },
         itemRequirements: {
           bot_bonus: { min: 1, max: 20, label: '1-20' }
+        }
+      },
+      player_deck: {
+        name: 'Player Deck',
+        description: 'Deck of player cards (juniors, free agents, transfer market)',
+        bundleClass: 'player_deck',
+        customData: {
+          deck_type: 'juniors'
+        },
+        itemRequirements: {
+          player: { min: 1, max: 50, label: '1-50' }
         }
       }
     }

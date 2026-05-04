@@ -11,6 +11,7 @@
         <span class="bundle-name" :title="bundle.DisplayName">
           {{ bundle.DisplayName || 'Unnamed Bundle' }}
         </span>
+        <span v-if="deckType" class="deck-type-badge">{{ deckType }}</span>
         <span v-if="isDeck" class="deck-count">{{ stats.itemCount }} cards</span>
         <button class="focus-btn" @click.stop="$emit('focus', bundle)" title="Open full view">
           ↗
@@ -21,11 +22,7 @@
     </div>
 
     <div v-if="isClub" class="bundle-stats">
-      <div class="stat-item" data-tooltip="Total Power">
-        <span class="stat-label">⚡</span>
-        <span class="stat-value">{{ stats.totalPower }}</span>
-      </div>
-      <div class="stat-item" v-if="stats.totalBalance > 0" data-tooltip="Total Balance">
+<div class="stat-item" v-if="stats.totalBalance > 0" data-tooltip="Total Balance">
         <span class="stat-label">💰</span>
         <span class="stat-value">{{ stats.totalBalance }}</span>
       </div>
@@ -94,7 +91,7 @@ import draggable from 'vuedraggable'
 import EntityCard from './EntityCard.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useBundleStats } from '../composables/useBundleStats'
-import { getTypeIcon, getTypeColor } from '../utils/entityHelpers'
+import { getTypeIcon, getTypeColor, parseCustomData } from '../utils/entityHelpers'
 
 const props = defineProps({
   bundle: {
@@ -115,6 +112,11 @@ const typeColor = computed(() => getTypeColor(props.bundle.ItemClass))
 
 const isClub = computed(() => props.bundle.ItemClass === 'club')
 const isDeck = computed(() => props.bundle.ItemClass.endsWith('_deck'))
+
+const deckType = computed(() => {
+  const data = parseCustomData(props.bundle.CustomData)
+  return data?.deck_type || null
+})
 
 const panelClasses = computed(() => ({
   'drag-over': isDragOver.value,
@@ -250,6 +252,16 @@ function handleChange(evt) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.deck-type-badge {
+  font-size: 11px;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  font-weight: 500;
 }
 
 .deck-count {

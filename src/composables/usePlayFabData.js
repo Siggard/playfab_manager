@@ -154,7 +154,10 @@ export function usePlayFabData() {
       feature_tactic: 'feature_tactic_',
       feature_tactic_slot: 'feature_tactic_slot_',
       bot_bonus: 'bot_bonus_',
-      bot_bonus_deck: 'bot_bonus_deck_'
+      bot_bonus_deck: 'bot_bonus_deck_',
+      player_deck: 'player_deck_',
+      debuff_player: 'debuff_player_',
+      status_token: 'status_token_'
     }
 
     const prefix = prefixes[itemClass] || `${itemClass}_`
@@ -291,6 +294,72 @@ export function usePlayFabData() {
     return Array.from(tags).sort()
   })
 
+  // Find all parents that reference this entity (bundles, feature_ids, debuff_ids, staff marks)
+  function getEntityAssignments(itemId) {
+    const assignments = []
+
+    for (const entity of state.entities) {
+      // Check BundledItems
+      if (entity.Bundle?.BundledItems?.includes(itemId)) {
+        assignments.push({ type: 'bundle', entity })
+        continue
+      }
+
+      // Check CustomData references
+      if (!entity.CustomData) continue
+      let data
+      try { data = JSON.parse(entity.CustomData) } catch { continue }
+      if (!data || typeof data !== 'object') continue
+
+      const cls = entity.ItemClass
+
+      // Player/Tactic: feature_ids[]
+      if ((cls === 'player' || cls === 'tactic') && Array.isArray(data.feature_ids) && data.feature_ids.includes(itemId)) {
+        assignments.push({ type: 'feature_ref', entity })
+        continue
+      }
+
+      // Tactic: slots[].feature_ids[]
+      if (cls === 'tactic' && Array.isArray(data.slots)) {
+        const found = data.slots.some(s => s && Array.isArray(s.feature_ids) && s.feature_ids.includes(itemId))
+        if (found) {
+          assignments.push({ type: 'slot_ref', entity })
+          continue
+        }
+      }
+
+      // Player: debuff_ids {}
+      if (cls === 'player' && data.debuff_ids && typeof data.debuff_ids === 'object') {
+        if (Object.keys(data.debuff_ids).includes(itemId) || Object.values(data.debuff_ids).includes(itemId)) {
+          assignments.push({ type: 'debuff_ref', entity })
+          continue
+        }
+      }
+
+      // Staff: marks[].feature_id
+      if (cls === 'staff' && Array.isArray(data.marks)) {
+        const found = data.marks.some(m => m && m.feature_id === itemId)
+        if (found) {
+          assignments.push({ type: 'mark_ref', entity })
+          continue
+        }
+      }
+
+      // Staff: special.tactics[]
+      if (cls === 'staff' && data.special && Array.isArray(data.special.tactics) && data.special.tactics.includes(itemId)) {
+        assignments.push({ type: 'tactic_ref', entity })
+        continue
+      }
+    }
+
+    return assignments
+  }
+
+  // Check if entity is assigned anywhere (bundles OR references)
+  function isEntityAssigned(itemId) {
+    return getEntityAssignments(itemId).length > 0
+  }
+
   return {
     state,
     loadJSON,
@@ -306,6 +375,8 @@ export function usePlayFabData() {
     getEntityById,
     getBundleEntities,
     isEntityInBundle,
+    getEntityAssignments,
+    isEntityAssigned,
     unassignedEntities,
     filteredEntities,
     entityClasses,

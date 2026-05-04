@@ -36,7 +36,7 @@
         @dragover.prevent
         @dragenter.prevent="dragOver = true"
         @dragleave="dragOver = false"
-        :class="{ 'drag-over': dragOver, 'type-location': type === 'location' }"
+        :class="{ 'drag-over': dragOver, 'type-location': type === 'location', 'type-tactic': type === 'tactic' }"
       >
         <!-- Regular items -->
         <div
@@ -307,7 +307,8 @@ function handleDrop(event) {
   background: #eff6ff;
 }
 
-.items-grid.type-location {
+.items-grid.type-location,
+.items-grid.type-tactic {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
