@@ -158,6 +158,12 @@ const defaultSettings = {
     filePath: null,
     timestamp: null,
     autoSaveEnabled: true
+  },
+
+  playfab: {
+    workerUrl: 'https://playfab-bundle-proxy.fcm.workers.dev',
+    editorPassword: '',
+    catalogVersion: 'Main'
   }
 }
 

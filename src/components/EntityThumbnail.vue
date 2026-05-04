@@ -34,7 +34,7 @@ async function loadImage() {
 }
 
 onMounted(loadImage)
-watch(() => props.entity.ItemId, loadImage)
+watch(getImagePath, loadImage)
 onUnmounted(() => {
   if (imageUrl.value && imageUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(imageUrl.value)

@@ -20,14 +20,14 @@
         <span class="upload-icon">📷</span>
         <p>Drag & drop image</p>
         <p class="hint">or click to browse</p>
-        <p class="hint">PNG/JPG, max 5MB</p>
+        <p class="hint">stored as-is in your image folder</p>
       </div>
     </div>
 
     <input
       ref="fileInput"
       type="file"
-      accept="image/png,image/jpeg,image/jpg"
+      accept="image/*"
       @change="handleFileSelect"
       style="display: none"
     />
@@ -129,12 +129,7 @@ async function processFile(file) {
   try {
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      throw new Error('Please upload an image file (PNG or JPG)')
-    }
-
-    // Validate size
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error('Image must be less than 5MB')
+      throw new Error('Please upload an image file')
     }
 
     // Upload and store

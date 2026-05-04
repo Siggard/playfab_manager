@@ -45,6 +45,7 @@
         </button>
         <FileUploader @loaded="handleLoaded" />
         <ExportButton />
+        <PlayFabSync />
         <button @click="openSettings" class="btn-header btn-settings" title="Settings">
           [=]
         </button>
@@ -185,6 +186,7 @@ import SettingsModal from './components/SettingsModal.vue'
 import WarningsDashboard from './components/WarningsDashboard.vue'
 import BundleFocusView from './components/BundleFocusView.vue'
 import EntityBrowser from './components/EntityBrowser.vue'
+import PlayFabSync from './components/PlayFabSync.vue'
 import { usePlayFabData } from './composables/usePlayFabData'
 import { useSettings } from './composables/useSettings'
 import { useHistory } from './composables/useHistory'

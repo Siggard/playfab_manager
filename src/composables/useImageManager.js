@@ -1,229 +1,250 @@
+import { ref } from 'vue'
 import { openDB } from 'idb'
 
 const DB_NAME = 'playfab-editor-images'
-const DB_VERSION = 1
-const STORE_NAME = 'images'
+const DB_VERSION = 2
+const META_STORE = 'meta'
+const HANDLE_KEY = 'imagesDirHandle'
 
 let dbInstance = null
+let cachedHandle = null
+
+const folderName = ref('')
+const permissionGranted = ref(false)
 
 async function getDB() {
   if (!dbInstance) {
     dbInstance = await openDB(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME)
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE)
         }
+        // Old "images" store from v1 (raw IDB blob storage) is no longer
+        // used; left in place to avoid surprising users who still rely on
+        // the ZIP export of older entries.
       }
     })
   }
   return dbInstance
 }
 
+async function loadHandle() {
+  if (cachedHandle) return cachedHandle
+  const db = await getDB()
+  cachedHandle = (await db.get(META_STORE, HANDLE_KEY)) || null
+  folderName.value = cachedHandle?.name || ''
+  return cachedHandle
+}
+
+async function checkPermission(handle) {
+  if (!handle) return false
+  const state = await handle.queryPermission({ mode: 'readwrite' })
+  permissionGranted.value = state === 'granted'
+  return permissionGranted.value
+}
+
+async function getRootHandle() {
+  const handle = await loadHandle()
+  if (!handle) return null
+  const ok = await checkPermission(handle)
+  return ok ? handle : null
+}
+
+function splitPath(relPath) {
+  const parts = relPath.split('/').filter(Boolean)
+  return { dirParts: parts.slice(0, -1), fileName: parts[parts.length - 1] }
+}
+
+async function getDirHandle(rootHandle, dirParts, { create = false } = {}) {
+  let dir = rootHandle
+  for (const part of dirParts) {
+    dir = await dir.getDirectoryHandle(part, { create })
+  }
+  return dir
+}
+
+async function* walkAll(dirHandle, prefix) {
+  for await (const [name, entry] of dirHandle.entries()) {
+    const path = prefix ? `${prefix}/${name}` : name
+    if (entry.kind === 'file') {
+      yield { path, handle: entry }
+    } else if (entry.kind === 'directory') {
+      yield* walkAll(entry, path)
+    }
+  }
+}
+
+function extFromFile(file) {
+  const fromName = file.name && file.name.match(/\.([a-z0-9]+)$/i)?.[1]
+  if (fromName) return fromName.toLowerCase()
+  const fromMime = file.type && file.type.split('/')[1]
+  return (fromMime || 'bin').toLowerCase()
+}
+
 export function useImageManager() {
 
-  /**
-   * Upload image and store in IndexedDB
-   * @param {File} file - Image file
-   * @param {string} itemClass - Entity class (player, staff, etc.)
-   * @param {string} itemId - Entity ID
-   * @returns {string} Image path
-   */
-  async function uploadImage(file, itemClass, itemId) {
-    const db = await getDB()
+  function isSupported() {
+    return typeof window !== 'undefined' && 'showDirectoryPicker' in window
+  }
 
-    // Validate file type
+  // Must be invoked from a user gesture (click handler).
+  async function pickFolder() {
+    if (!isSupported()) {
+      throw new Error('File System Access API is not supported in this browser. Use Chrome, Edge, or Safari.')
+    }
+    const handle = await window.showDirectoryPicker({
+      id: 'playfab-images',
+      mode: 'readwrite'
+    })
+    const perm = await handle.requestPermission({ mode: 'readwrite' })
+    if (perm !== 'granted') {
+      throw new Error('Read/write permission denied')
+    }
+    const db = await getDB()
+    await db.put(META_STORE, handle, HANDLE_KEY)
+    cachedHandle = handle
+    folderName.value = handle.name
+    permissionGranted.value = true
+    return handle.name
+  }
+
+  // Must be invoked from a user gesture if state is 'prompt'.
+  async function requestPermission() {
+    const handle = await loadHandle()
+    if (!handle) throw new Error('No folder picked yet')
+    const perm = await handle.requestPermission({ mode: 'readwrite' })
+    permissionGranted.value = perm === 'granted'
+    return permissionGranted.value
+  }
+
+  async function refreshPermissionState() {
+    const handle = await loadHandle()
+    if (!handle) {
+      permissionGranted.value = false
+      return false
+    }
+    return checkPermission(handle)
+  }
+
+  async function forgetFolder() {
+    const db = await getDB()
+    await db.delete(META_STORE, HANDLE_KEY)
+    cachedHandle = null
+    folderName.value = ''
+    permissionGranted.value = false
+  }
+
+  async function uploadImage(file, itemClass, itemId) {
     if (!file.type.startsWith('image/')) {
       throw new Error('File must be an image')
     }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error('Image must be less than 5MB')
+    const root = await getRootHandle()
+    if (!root) {
+      throw new Error('No image folder configured. Open Settings → PlayFab → Pick Folder.')
     }
 
-    // Resize image if needed
-    const resizedBlob = await resizeImage(file, 512)
+    const ext = extFromFile(file)
+    const path = `${itemClass}/${itemId}.${ext}`
 
-    // Generate path
-    const ext = file.type === 'image/png' ? 'png' : 'jpg'
-    const path = `images/${itemClass}/${itemId}.${ext}`
+    const { dirParts, fileName } = splitPath(path)
+    const dir = await getDirHandle(root, dirParts, { create: true })
+    const fileHandle = await dir.getFileHandle(fileName, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(file)
+    await writable.close()
 
-    // Store in IndexedDB
-    await db.put(STORE_NAME, resizedBlob, path)
-
-    console.log(`Image uploaded: ${path}`)
+    console.log(`Image written: ${path} (${file.size} bytes)`)
     return path
   }
 
-  /**
-   * Get image preview URL from IndexedDB
-   * @param {string} path - Image path
-   * @returns {string|null} Object URL or null
-   */
   async function getImagePreview(path) {
     if (!path) return null
-
+    const root = await getRootHandle()
+    if (!root) return null
     try {
-      const db = await getDB()
-      const blob = await db.get(STORE_NAME, path)
-
-      if (blob) {
-        return URL.createObjectURL(blob)
-      }
-    } catch (e) {
-      console.error('Failed to get image preview:', e)
+      const { dirParts, fileName } = splitPath(path)
+      const dir = await getDirHandle(root, dirParts, { create: false })
+      const fileHandle = await dir.getFileHandle(fileName, { create: false })
+      const file = await fileHandle.getFile()
+      return URL.createObjectURL(file)
+    } catch {
+      return null
     }
-
-    return null
   }
 
-  /**
-   * Remove image from IndexedDB
-   * @param {string} path - Image path
-   */
   async function removeImage(path) {
     if (!path) return
-
+    const root = await getRootHandle()
+    if (!root) return
     try {
-      const db = await getDB()
-      await db.delete(STORE_NAME, path)
+      const { dirParts, fileName } = splitPath(path)
+      const dir = await getDirHandle(root, dirParts, { create: false })
+      await dir.removeEntry(fileName)
       console.log(`Image removed: ${path}`)
     } catch (e) {
-      console.error('Failed to remove image:', e)
+      console.warn(`Remove image failed: ${e.message}`)
     }
   }
 
-  /**
-   * Get all stored images
-   * @returns {Object} Map of path -> blob
-   */
-  async function getAllImages() {
-    const db = await getDB()
-    const keys = await db.getAllKeys(STORE_NAME)
-    const images = {}
-
-    for (const key of keys) {
-      const blob = await db.get(STORE_NAME, key)
-      if (blob) {
-        images[key] = blob
-      }
-    }
-
-    return images
-  }
-
-  /**
-   * Get image count
-   * @returns {number}
-   */
-  async function getImageCount() {
-    const db = await getDB()
-    const keys = await db.getAllKeys(STORE_NAME)
-    return keys.length
-  }
-
-  /**
-   * Clear all images
-   */
-  async function clearAllImages() {
-    const db = await getDB()
-    await db.clear(STORE_NAME)
-    console.log('All images cleared')
-  }
-
-  /**
-   * Check if image exists
-   * @param {string} path
-   * @returns {boolean}
-   */
   async function hasImage(path) {
     if (!path) return false
-
+    const root = await getRootHandle()
+    if (!root) return false
     try {
-      const db = await getDB()
-      const blob = await db.get(STORE_NAME, path)
-      return !!blob
+      const { dirParts, fileName } = splitPath(path)
+      const dir = await getDirHandle(root, dirParts, { create: false })
+      await dir.getFileHandle(fileName, { create: false })
+      return true
     } catch {
       return false
     }
   }
 
-  /**
-   * Resize image to max dimension
-   * @param {File} file
-   * @param {number} maxSize
-   * @returns {Blob}
-   */
-  function resizeImage(file, maxSize) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-
-      reader.onload = (e) => {
-        const img = new Image()
-
-        img.onload = () => {
-          let width = img.width
-          let height = img.height
-
-          // Only resize if larger than maxSize
-          if (width > maxSize || height > maxSize) {
-            if (width > height) {
-              height = Math.round((height / width) * maxSize)
-              width = maxSize
-            } else {
-              width = Math.round((width / height) * maxSize)
-              height = maxSize
-            }
-          }
-
-          const canvas = document.createElement('canvas')
-          canvas.width = width
-          canvas.height = height
-
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0, width, height)
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                resolve(blob)
-              } else {
-                reject(new Error('Failed to create blob'))
-              }
-            },
-            file.type,
-            0.85
-          )
-        }
-
-        img.onerror = () => reject(new Error('Failed to load image'))
-        img.src = e.target.result
-      }
-
-      reader.onerror = () => reject(new Error('Failed to read file'))
-      reader.readAsDataURL(file)
-    })
+  async function getAllImages() {
+    const root = await getRootHandle()
+    if (!root) return {}
+    const result = {}
+    for await (const entry of walkAll(root, '')) {
+      result[entry.path] = await entry.handle.getFile()
+    }
+    return result
   }
 
-  /**
-   * Generate image path for an entity
-   * @param {string} itemClass
-   * @param {string} itemId
-   * @param {string} ext
-   * @returns {string}
-   */
+  async function getImageCount() {
+    const root = await getRootHandle()
+    if (!root) return 0
+    let count = 0
+    for await (const _ of walkAll(root, '')) count++
+    return count
+  }
+
+  // Folder is shared with the user's game project, so we must not wipe its
+  // contents. "Clear" here just forgets the folder handle in the editor;
+  // files on disk stay untouched.
+  async function clearAllImages() {
+    await forgetFolder()
+  }
+
   function generateImagePath(itemClass, itemId, ext = 'png') {
-    return `images/${itemClass}/${itemId}.${ext}`
+    return `${itemClass}/${itemId}.${ext}`
   }
 
   return {
+    isSupported,
+    pickFolder,
+    requestPermission,
+    refreshPermissionState,
+    forgetFolder,
+    folderName,
+    permissionGranted,
+
     uploadImage,
     getImagePreview,
     removeImage,
+    hasImage,
     getAllImages,
     getImageCount,
     clearAllImages,
-    hasImage,
     generateImagePath
   }
 }

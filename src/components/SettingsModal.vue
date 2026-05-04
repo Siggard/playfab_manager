@@ -119,6 +119,50 @@
         <!-- Data Tab -->
         <div v-if="activeTab === 'data'" class="tab-content">
           <section class="settings-section">
+            <h3>Image Folder</h3>
+            <p class="section-desc">
+              Pick a folder on disk where the editor reads/writes images directly.
+              Point this at your game project's image folder (e.g. <code>C:\Work\FCM_2\images\content</code>)
+              so files appear immediately and sync via git like any other asset.
+            </p>
+
+            <div v-if="!imageFolderSupported" class="folder-warning">
+              This browser doesn't support direct folder access. Use Chrome, Edge, or a recent Safari.
+            </div>
+
+            <div v-else class="folder-status">
+              <div v-if="imageFolderName">
+                <strong>Folder:</strong> <code>{{ imageFolderName }}</code>
+                <span v-if="imageFolderGranted" class="folder-ok">access granted</span>
+                <span v-else class="folder-warn">access needs re-grant — click "Re-grant access"</span>
+              </div>
+              <div v-else class="folder-empty">No folder selected.</div>
+            </div>
+
+            <div class="data-actions">
+              <button @click="handlePickFolder" class="btn btn-primary" :disabled="!imageFolderSupported">
+                {{ imageFolderName ? 'Change Folder' : 'Pick Folder' }}
+              </button>
+              <button
+                v-if="imageFolderName && !imageFolderGranted"
+                @click="handleRegrantAccess"
+                class="btn btn-secondary"
+              >
+                Re-grant Access
+              </button>
+              <button
+                v-if="imageFolderName"
+                @click="handleForgetFolder"
+                class="btn btn-warning"
+              >
+                Forget Folder
+              </button>
+              <span v-if="folderActionStatus" class="test-ok">{{ folderActionStatus }}</span>
+              <span v-if="folderActionError" class="test-err">{{ folderActionError }}</span>
+            </div>
+          </section>
+
+          <section class="settings-section">
             <h3>Export / Import Settings</h3>
             <p class="section-desc">Backup or transfer your templates and preferences</p>
             <div class="data-actions">
@@ -139,15 +183,57 @@
           </section>
 
           <section class="settings-section">
-            <h3>Clear Data</h3>
-            <p class="section-desc">Remove stored images or reset settings</p>
+            <h3>Reset</h3>
+            <p class="section-desc">Wipe all settings and templates back to defaults</p>
             <div class="data-actions">
-              <button @click="handleClearImages" class="btn btn-warning">
-                Clear All Images
-              </button>
               <button @click="handleResetSettings" class="btn btn-danger">
                 Reset to Defaults
               </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- PlayFab Tab -->
+        <div v-if="activeTab === 'playfab'" class="tab-content">
+          <section class="settings-section">
+            <h3>PlayFab Sync</h3>
+            <p class="section-desc">
+              Pull/Push the catalog directly to PlayFab via your Cloudflare Worker proxy.
+              Setup instructions: <code>worker/README.md</code>.
+            </p>
+
+            <div class="form-group">
+              <label>Worker URL</label>
+              <input
+                v-model="settings.playfab.workerUrl"
+                placeholder="https://playfab-bundle-proxy.&lt;your-subdomain&gt;.workers.dev"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Editor Password</label>
+              <input
+                v-model="settings.playfab.editorPassword"
+                type="password"
+                placeholder="Shared password (= EDITOR_PASSWORD secret on the Worker)"
+                autocomplete="off"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Catalog Version</label>
+              <input
+                v-model="settings.playfab.catalogVersion"
+                placeholder="Main"
+              />
+            </div>
+
+            <div class="data-actions">
+              <button @click="handleTestPlayFab" class="btn btn-secondary">
+                Test Connection
+              </button>
+              <span v-if="playfabTest.status" class="test-ok">{{ playfabTest.status }}</span>
+              <span v-if="playfabTest.error" class="test-err">{{ playfabTest.error }}</span>
             </div>
           </section>
         </div>
@@ -242,20 +328,50 @@
 import { ref, reactive, computed } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
+import { usePlayFabSync } from '../composables/usePlayFabSync'
 import { getTypeIcon, typeIcons } from '../utils/entityHelpers'
 
 const emit = defineEmits(['close'])
 
 const { settings, exportSettings, importSettings, resetSettings, saveTemplate: saveSettingsTemplate, deleteTemplate } = useSettings()
-const { clearAllImages } = useImageManager()
+const {
+  isSupported: imageFolderIsSupported,
+  pickFolder,
+  requestPermission: regrantFolderAccess,
+  forgetFolder,
+  folderName: imageFolderName,
+  permissionGranted: imageFolderGranted,
+  refreshPermissionState: refreshImageFolderPermission
+} = useImageManager()
+const { testConnection } = usePlayFabSync()
+
+const imageFolderSupported = imageFolderIsSupported()
+const folderActionStatus = ref('')
+const folderActionError = ref('')
+
+refreshImageFolderPermission()
 
 const importInput = ref(null)
 
 const tabs = [
   { id: 'templates', icon: '[ ]', label: 'Templates' },
   { id: 'ui', icon: '[#]', label: 'Interface' },
-  { id: 'data', icon: '[D]', label: 'Data' }
+  { id: 'data', icon: '[D]', label: 'Data' },
+  { id: 'playfab', icon: '[P]', label: 'PlayFab' }
 ]
+
+const playfabTest = reactive({ status: '', error: '' })
+
+async function handleTestPlayFab() {
+  playfabTest.status = ''
+  playfabTest.error = ''
+  try {
+    await testConnection()
+    playfabTest.status = 'Worker reachable'
+  } catch (e) {
+    playfabTest.error = e.message
+  }
+}
 
 const activeTab = ref('templates')
 
@@ -391,11 +507,39 @@ async function handleImportSettings(event) {
   event.target.value = ''
 }
 
-function handleClearImages() {
-  if (confirm('This will delete all stored images. Continue?')) {
-    clearAllImages()
-    alert('All images cleared')
+async function handlePickFolder() {
+  folderActionStatus.value = ''
+  folderActionError.value = ''
+  try {
+    const name = await pickFolder()
+    folderActionStatus.value = `Folder set: ${name}`
+  } catch (e) {
+    if (e.name === 'AbortError') return
+    folderActionError.value = e.message
   }
+}
+
+async function handleRegrantAccess() {
+  folderActionStatus.value = ''
+  folderActionError.value = ''
+  try {
+    const ok = await regrantFolderAccess()
+    if (ok) {
+      folderActionStatus.value = 'Access granted'
+    } else {
+      folderActionError.value = 'Permission not granted'
+    }
+  } catch (e) {
+    folderActionError.value = e.message
+  }
+}
+
+async function handleForgetFolder() {
+  if (!confirm('Forget the picked folder? Files on disk are NOT deleted.')) return
+  folderActionStatus.value = ''
+  folderActionError.value = ''
+  await forgetFolder()
+  folderActionStatus.value = 'Folder forgotten'
 }
 
 function handleResetSettings() {
@@ -685,6 +829,59 @@ function handleResetSettings() {
 
 .btn-danger:hover {
   background: #fecaca;
+}
+
+.test-ok {
+  align-self: center;
+  font-size: 13px;
+  color: #047857;
+}
+
+.test-err {
+  align-self: center;
+  font-size: 13px;
+  color: #b91c1c;
+  word-break: break-word;
+}
+
+.folder-status {
+  font-size: 13px;
+  margin-bottom: 12px;
+  color: #374151;
+}
+
+.folder-status code {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.folder-empty {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.folder-ok {
+  margin-left: 8px;
+  color: #047857;
+  font-size: 12px;
+}
+
+.folder-warn {
+  margin-left: 8px;
+  color: #b45309;
+  font-size: 12px;
+}
+
+.folder-warning {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 13px;
 }
 
 .modal-footer {

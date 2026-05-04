@@ -208,8 +208,8 @@ onMounted(() => {
   loadImage()
 })
 
-// Watch for entity changes
-watch(() => props.entity.ItemId, () => {
+// Re-load image when entity ID, class or CustomData.imagePath changes
+watch(getImagePath, () => {
   loadImage()
 })
 
