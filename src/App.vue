@@ -204,7 +204,7 @@ const {
   cleanup: cleanupAutoSave
 } = useAutoSave()
 
-const isLoaded = ref(false)
+const isLoaded = computed(() => state.catalogData !== null)
 
 // Entity editor state
 const editorVisible = ref(false)
@@ -252,7 +252,6 @@ onUnmounted(() => {
 })
 
 function handleLoaded(data) {
-  isLoaded.value = true
   console.log('Loaded:', data.Catalog.length, 'entities')
 }
 
@@ -354,7 +353,6 @@ function closeSettings() {
 function handleRestore(shouldRestore) {
   if (shouldRestore && pendingAutoSave.value) {
     restoreAutoSave(pendingAutoSave.value)
-    isLoaded.value = true
   } else {
     clearAutoSave()
   }
