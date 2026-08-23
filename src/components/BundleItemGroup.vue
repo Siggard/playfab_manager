@@ -3,12 +3,9 @@
     <div class="group-header" :class="groupStatus" @click="isCollapsed = !isCollapsed">
       <span class="toggle-icon">{{ isCollapsed ? '>' : 'v' }}</span>
       <span class="type-icon">{{ typeIcon }}</span>
-      <h4>{{ typeLabel }} ({{ totalCount }}{{ linkedItems.length > 0 ? `, ${linkedItems.length} linked` : '' }}{{ recommendationLabel }})</h4>
-      <span v-if="totalPower > 0 && type !== 'staff'" class="group-stats">
+      <h4>{{ typeLabel }} ({{ totalCount }}{{ recommendationLabel }})</h4>
+      <span v-if="totalPower > 0" class="group-stats">
         Power: {{ totalPower }}
-      </span>
-      <span v-if="totalSalary > 0 && type === 'staff'" class="group-stats">
-        Salary: {{ totalSalary }}
       </span>
       <button
         v-if="!isCollapsed"
@@ -22,7 +19,7 @@
     <div v-show="!isCollapsed" class="group-content">
       <!-- Empty state -->
       <div v-if="!hasAnyItems" class="empty-group">
-        <p>No {{ typeLabel.toLowerCase() }} yet</p>
+        <p>No {{ typeLabelInline }} yet</p>
         <button @click="$emit('quick-add', type)" class="btn-add">
           + Add {{ typeLabel }}
         </button>
@@ -36,7 +33,7 @@
         @dragover.prevent
         @dragenter.prevent="dragOver = true"
         @dragleave="dragOver = false"
-        :class="{ 'drag-over': dragOver, 'type-location': type === 'location', 'type-tactic': type === 'tactic' }"
+        :class="{ 'drag-over': dragOver, 'type-location': type === 'location', 'type-tactic': type === 'tactic', 'type-connection': type === 'personal_connection' }"
       >
         <!-- Regular items -->
         <div
@@ -54,26 +51,12 @@
             x
           </button>
         </div>
-
-        <!-- Linked items (from other entities like staff) -->
-        <div
-          v-for="linked in linkedItems"
-          :key="'linked-' + linked.item.ItemId"
-          class="item-wrapper linked-item"
-          @dblclick="$emit('edit-item', linked.item)"
-          :title="'Linked from ' + linked.sourceItem.DisplayName"
-        >
-          <EntityCard :entity="linked.item" />
-          <span class="linked-badge" :title="'Linked from ' + linked.sourceItem.DisplayName">
-            🔗
-          </span>
-        </div>
       </div>
 
       <!-- Quick add zone -->
       <div v-if="hasAnyItems" class="quick-add-zone">
         <button @click="$emit('quick-add', type)" class="btn-add-outlined">
-          + Add another {{ typeLabel.toLowerCase() }}
+          + Add another {{ typeLabelInline }}
         </button>
       </div>
     </div>
@@ -87,10 +70,6 @@ import EntityCard from './EntityCard.vue'
 const props = defineProps({
   type: String,
   items: Array,
-  linkedItems: {
-    type: Array,
-    default: () => []
-  },
   recommendations: Object,
   bundleId: String
 })
@@ -102,27 +81,30 @@ const dragOver = ref(false)
 
 const typeLabels = {
   player: 'Players',
-  staff: 'Staff',
   team: 'Team',
   tactic: 'Tactics',
+  personal_connection: 'Личные связи',
   location: 'Locations',
   feature: 'Features'
 }
 
 const typeIcons = {
   player: '[P]',
-  staff: '[S]',
   team: '[T]',
   tactic: '[X]',
+  personal_connection: '[C]',
   location: '[L]',
   feature: '[F]'
 }
 
 const typeLabel = computed(() => typeLabels[props.type] || props.type)
+// Only English labels read well lowercased inside a sentence
+const typeLabelInline = computed(() =>
+  /^[ -~]+$/.test(typeLabel.value) ? typeLabel.value.toLowerCase() : typeLabel.value
+)
 const typeIcon = computed(() => typeIcons[props.type] || '[?]')
 
-// Total count including linked items
-const totalCount = computed(() => props.items.length + props.linkedItems.length)
+const totalCount = computed(() => props.items.length)
 const hasAnyItems = computed(() => totalCount.value > 0)
 
 const recommendationLabel = computed(() => {
@@ -147,25 +129,10 @@ const totalPower = computed(() => {
   }, 0)
 })
 
-const totalSalary = computed(() => {
-  return props.items.reduce((sum, item) => {
-    return sum + (getItemSalary(item) || 0)
-  }, 0)
-})
-
 function getItemPower(item) {
   try {
     const data = JSON.parse(item.CustomData || '{}')
     return parseInt(data.power) || 0
-  } catch {
-    return 0
-  }
-}
-
-function getItemSalary(item) {
-  try {
-    const data = JSON.parse(item.CustomData || '{}')
-    return parseInt(data.salary) || 0
   } catch {
     return 0
   }
@@ -308,7 +275,8 @@ function handleDrop(event) {
 }
 
 .items-grid.type-location,
-.items-grid.type-tactic {
+.items-grid.type-tactic,
+.items-grid.type-connection {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
@@ -345,34 +313,6 @@ function handleDrop(event) {
 
 .btn-remove-overlay:hover {
   background: #dc2626;
-}
-
-/* Linked items styling */
-.item-wrapper.linked-item {
-  position: relative;
-}
-
-.item-wrapper.linked-item :deep(.entity-card) {
-  background: #f0f9ff;
-  border: 1px dashed #93c5fd;
-  border-left: 4px solid #3b82f6;
-}
-
-.linked-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #dbeafe;
-  border: 1px solid #93c5fd;
-  border-radius: 50%;
-  font-size: 10px;
-  cursor: help;
-  z-index: 10;
 }
 
 .empty-group {

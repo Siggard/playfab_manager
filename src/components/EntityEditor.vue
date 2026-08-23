@@ -63,12 +63,17 @@
         <div v-else class="form-row">
           <div class="form-group flex-1">
             <label>Item ID</label>
-            <input
-              type="text"
-              :value="form.ItemId"
-              disabled
-              class="readonly"
-            />
+            <div class="input-with-btn">
+              <input
+                type="text"
+                :value="form.ItemId"
+                disabled
+                class="readonly"
+              />
+              <button type="button" @click="openRename" class="btn-generate">
+                Rename
+              </button>
+            </div>
           </div>
           <div class="form-group flex-1">
             <label>Item Class</label>
@@ -78,6 +83,55 @@
               disabled
               class="readonly"
             />
+          </div>
+        </div>
+
+        <!-- Rename with reference rewrite -->
+        <div v-if="renaming" class="rename-panel">
+          <label>Rename to</label>
+          <div class="input-with-btn">
+            <input
+              type="text"
+              v-model="renameId"
+              :class="{ error: renameError }"
+              placeholder="new item id"
+              @keyup.enter="confirmRename"
+            />
+            <button type="button" @click="confirmRename" class="btn-rename" :disabled="!!renameError">
+              Apply
+            </button>
+            <button type="button" @click="renaming = false" class="btn-cancel-rename">
+              Cancel
+            </button>
+          </div>
+
+          <span v-if="renameError" class="error-text">{{ renameError }}</span>
+          <span v-else-if="renameFormatWarning" class="warn-text">{{ renameFormatWarning }}</span>
+
+          <div class="rename-preview">
+            <div v-if="renameReferences.length === 0" class="rename-empty">
+              Nothing else in the catalog points at this ID — only the entity itself changes.
+            </div>
+            <div v-else>
+              <div class="rename-preview-title">
+                Will also rewrite {{ renamePathCount }}
+                {{ renamePathCount === 1 ? 'reference' : 'references' }}
+                in {{ renameReferences.length }}
+                {{ renameReferences.length === 1 ? 'entity' : 'entities' }}:
+              </div>
+              <div
+                v-for="ref in renameReferences"
+                :key="ref.entity.ItemId"
+                class="rename-ref"
+              >
+                <span class="rename-ref-icon">{{ getTypeIcon(ref.entity.ItemClass) }}</span>
+                <span class="rename-ref-name">{{ ref.entity.DisplayName || ref.entity.ItemId }}</span>
+                <span class="rename-ref-id">{{ ref.entity.ItemId }}</span>
+                <span class="rename-ref-paths">{{ ref.paths.join(', ') }}</span>
+              </div>
+            </div>
+
+            <div v-if="renameImageNote" class="rename-note">{{ renameImageNote }}</div>
           </div>
         </div>
 
@@ -247,7 +301,7 @@
             <li><code>strict: true</code> — метку нельзя заменить джокером (по умолчанию false)</li>
             <li><code>bonus_marks</code> — бонусные метки для усиления эффекта</li>
           </ul>
-          <p>Каждая группа = 1 слот для метки staff.</p>
+          <p>Каждая группа = 1 слот для метки персонала.</p>
         </section>
 
         <section class="help-section">
@@ -353,7 +407,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
-import { getTypeIcon, isValidJSON, typeIcons } from '../utils/entityHelpers'
+import { getTypeIcon, isValidJSON, typeIcons, isDeprecatedClass } from '../utils/entityHelpers'
 import ImageUploader from './ImageUploader.vue'
 import EntityCard from './EntityCard.vue'
 
@@ -364,7 +418,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save', 'delete', 'open-linked', 'duplicate'])
 
-const { state, generateItemId, updateEntity, createEntity, deleteEntity, getEntityAssignments } = usePlayFabData()
+const { state, generateItemId, updateEntity, createEntity, deleteEntity, getEntityAssignments, findReferences, renameEntity } = usePlayFabData()
 const { getItemTemplates, getTemplate } = useSettings()
 const { generateImagePath, hasImage } = useImageManager()
 
@@ -382,11 +436,74 @@ const newTag = ref('')
 const selectedTemplate = ref(null)
 const showHelp = ref(false)
 
+// Rename: ItemId is the join key, so every reference is rewritten in the same pass
+const renaming = ref(false)
+const renameId = ref('')
+
+function openRename() {
+  renameId.value = form.ItemId
+  renaming.value = true
+}
+
+const renameReferences = computed(() =>
+  props.isNew ? [] : findReferences(props.entity?.ItemId)
+)
+
+const renamePathCount = computed(() =>
+  renameReferences.value.reduce((sum, ref) => sum + ref.paths.length, 0)
+)
+
+const renameError = computed(() => {
+  const next = renameId.value.trim()
+  if (!next) return 'ID cannot be empty'
+  if (next === form.ItemId) return 'The ID is unchanged'
+  if (/\s/.test(next)) return 'ID cannot contain spaces'
+  if (state.entities.some(e => e.ItemId === next)) return `ID "${next}" is already taken`
+  return ''
+})
+
+const renameFormatWarning = computed(() => {
+  const next = renameId.value.trim()
+  const expected = `${form.ItemClass}_`
+  if (!next || renameError.value) return ''
+  return next.startsWith(expected)
+    ? ''
+    : `Heads up: ${form.ItemClass} IDs normally start with "${expected}"`
+})
+
+// An explicit imagePath keeps pointing at the same file, a convention-based one does not
+const renameImageNote = computed(() => {
+  if (props.isNew) return ''
+  return form.imagePath
+    ? ''
+    : 'This entity has no explicit imagePath, so any image found by the old ID convention will need re-linking.'
+})
+
+function confirmRename() {
+  if (renameError.value) return
+
+  const next = renameId.value.trim()
+  const result = renameEntity(props.entity.ItemId, next)
+  if (!result.ok) {
+    console.error('Rename failed:', result.error)
+    return
+  }
+
+  form.ItemId = next
+  // The entity's own CustomData may have been rewritten too
+  form.CustomData = props.entity.CustomData
+    ? JSON.stringify(JSON.parse(props.entity.CustomData), null, 2)
+    : ''
+  renaming.value = false
+}
+
 // Merge classes from loaded data + config (typeIcons is the source of truth)
 const itemClasses = computed(() => {
   const fromData = Array.from(state.itemClasses)
   const fromConfig = Object.keys(typeIcons).filter(c => !c.endsWith('_deck'))
-  return [...new Set([...fromConfig, ...fromData])].sort()
+  return [...new Set([...fromConfig, ...fromData])]
+    .filter(c => !isDeprecatedClass(c))
+    .sort()
 })
 const availableTemplates = computed(() => getItemTemplates())
 
@@ -395,7 +512,7 @@ const linkedFeatures = computed(() => {
   if (!props.entity || props.isNew) return []
 
   const itemClass = props.entity.ItemClass
-  if (itemClass !== 'player' && itemClass !== 'tactic' && itemClass !== 'staff') return []
+  if (itemClass !== 'player' && itemClass !== 'tactic') return []
 
   try {
     const data = JSON.parse(props.entity.CustomData || '{}')
@@ -446,35 +563,6 @@ const linkedFeatures = computed(() => {
           }
         })
       }
-    } else if (itemClass === 'staff') {
-      // Staff: features in marks[].feature_id
-      if (Array.isArray(data.marks)) {
-        data.marks.forEach((mark) => {
-          if (mark && mark.feature_id) {
-            const featureEntity = state.entities.find(e => e.ItemId === mark.feature_id)
-            if (featureEntity) {
-              const markType = mark.type || 'mark'
-              features.push({
-                position: markType.toUpperCase().replace(/_/g, ' '),
-                entity: featureEntity
-              })
-            }
-          }
-        })
-      }
-
-      // Staff: linked tactics in special.tactics[]
-      if (data.special && Array.isArray(data.special.tactics)) {
-        data.special.tactics.forEach((tacticId) => {
-          const tacticEntity = state.entities.find(e => e.ItemId === tacticId)
-          if (tacticEntity) {
-            features.push({
-              position: 'TACTIC',
-              entity: tacticEntity
-            })
-          }
-        })
-      }
     }
 
     return features
@@ -517,6 +605,9 @@ const assignedTo = computed(() => {
 
 const assignmentTypeLabels = {
   bundle: 'Bundle',
+  infra_ref: 'Infra slot of',
+  roster_ref: 'Roster of',
+  custom_ref: 'Referenced by',
   feature_ref: 'Feature of',
   slot_ref: 'Slot in',
   debuff_ref: 'Debuff of',
@@ -1175,6 +1266,109 @@ function handleDuplicate() {
 }
 
 /* Assigned To section */
+.rename-panel {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.rename-panel label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.btn-rename {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-rename:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-rename:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel-rename {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #475569;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-cancel-rename:hover {
+  background: #f1f5f9;
+}
+
+.warn-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #b45309;
+}
+
+.rename-preview {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #bfdbfe;
+  font-size: 12px;
+  color: #1e3a8a;
+}
+
+.rename-preview-title {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.rename-empty {
+  color: #475569;
+}
+
+.rename-ref {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.rename-ref-name {
+  font-weight: 500;
+}
+
+.rename-ref-id,
+.rename-ref-paths {
+  font-family: monospace;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.rename-ref-paths {
+  margin-left: auto;
+  text-align: right;
+}
+
+.rename-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #b45309;
+}
+
 .assigned-to-section {
   margin-bottom: 16px;
   padding: 12px;

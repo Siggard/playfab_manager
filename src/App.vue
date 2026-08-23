@@ -4,7 +4,7 @@
     <header class="app-header">
       <div class="header-left">
         <h1>PlayFab Bundle Editor</h1>
-        <span class="version">v1.1</span>
+        <span class="version">v1.2</span>
       </div>
       <div class="header-center" v-if="isLoaded">
         <!-- Undo/Redo controls -->

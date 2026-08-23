@@ -241,10 +241,6 @@
                   :key="style"
                   class="detail-chip tactic"
                 >{{ formatStyle(style) }}</span>
-                <!-- Staff marks -->
-                <span v-if="getDisplayInfo(entity).activeMarks" class="detail-chip staff">
-                  {{ getDisplayInfo(entity).activeMarks }}
-                </span>
                 <!-- Location directions -->
                 <span
                   v-for="dir in (getDisplayInfo(entity).directions || [])"
@@ -977,11 +973,6 @@ function getDisplayInfo(entity) {
 .detail-chip.tactic {
   background: #ede9fe;
   color: #6d28d9;
-}
-
-.detail-chip.staff {
-  background: #d1fae5;
-  color: #065f46;
 }
 
 .detail-chip.location {

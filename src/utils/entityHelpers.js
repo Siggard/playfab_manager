@@ -1,39 +1,93 @@
 // Icon mapping for entity types
 export const typeIcons = {
   player: '⚽',
-  staff: '👔',
   team: '🏆',
   tactic: '📋',
   location: '🏟️',
   club: '🏛️',
   feature_player: '⭐',
-  feature_staff: '⭐',
   feature_tactic: '⭐',
   feature_tactic_slot: '🎯',
   bot_bonus: '🃏',
   bot_bonus_deck: '🎴',
   player_deck: '🂠',
   debuff_player: '💀',
-  status_token: '🎫'
+  status_token: '🎫',
+  personal_connection: '🤝'
 }
+
+// Classes removed from the game design; hidden from creation UI but still
+// rendered if present in a loaded catalog so they can be found and deleted.
+export const deprecatedClasses = new Set(['staff', 'feature_staff'])
+
+export function isDeprecatedClass(itemClass) {
+  return deprecatedClasses.has(itemClass)
+}
+
+// Club infrastructure: a fixed row of slots, each holding at most one location.
+// A slot climbs the chain locked -> closed -> negotiating -> deploying -> active;
+// 'locked' cannot even be opened.
+export const INFRA_SLOT_COUNT = 6
+export const INFRA_SLOT_STATES = ['locked', 'closed', 'negotiating', 'deploying', 'active']
+
+export function emptyInfraSlots(count = INFRA_SLOT_COUNT) {
+  return Array.from({ length: count }, (_, i) => ({
+    index: i + 1,
+    state: 'closed',
+    location_id: null,
+    level: 0,
+    timer: null
+  }))
+}
+
+// Reputation is a token walking a -10…+10 scale that has no zero position.
+// Stored on the club bundle as { value: <magnitude>, face: 'negative' | 'positive' }.
+export const REPUTATION_MAX = 10
+export const REPUTATION_FACES = ['negative', 'positive']
+
+// `value` is the signed position on the scale and `face` is which side of the token
+// is up — the two are independent, a positive face can sit at -10.
+export function getReputation(customDataString) {
+  const data = parseCustomData(customDataString)
+  const rep = data?.reputation
+
+  if (!rep || typeof rep !== 'object' || Array.isArray(rep)) return null
+
+  return {
+    value: parseInt(rep.value, 10) || 0,
+    face: rep.face === 'positive' ? 'positive' : 'negative'
+  }
+}
+
+export function formatReputationValue(value) {
+  return value > 0 ? `+${value}` : String(value)
+}
+
+// Staff is no longer a card — it lives as counters in the club bundle CustomData
+export const DEFAULT_STAFF_ROLES = [
+  'coaching_staff',
+  'medical_staff',
+  'scouting_staff',
+  'assistant',
+  'secretary'
+]
 
 // Color mapping for entity types
 export const typeColors = {
   player: '#3B82F6',       // blue
-  staff: '#10B981',        // green
   team: '#EF4444',         // red
   tactic: '#8B5CF6',       // purple
   location: '#F59E0B',     // orange
   club: '#EC4899',         // pink
   feature_player: '#6366F1', // indigo
-  feature_staff: '#14B8A6',  // teal
   feature_tactic: '#A855F7', // violet
   feature_tactic_slot: '#F97316', // orange
   bot_bonus: '#06B6D4',     // cyan
   bot_bonus_deck: '#0891B2', // darker cyan
   player_deck: '#2563EB',   // royal blue
   debuff_player: '#DC2626',  // red
-  status_token: '#84CC16'    // lime
+  status_token: '#84CC16',   // lime
+  personal_connection: '#14B8A6' // teal
 }
 
 // Get icon for entity type
@@ -127,24 +181,6 @@ export function getEntityDisplayInfo(entity) {
     }
   }
 
-  // Parse active marks for staff
-  let activeMarks = null
-  let hasTactics = false
-  if (entity?.ItemClass === 'staff') {
-    if (data.marks && Array.isArray(data.marks)) {
-      const active = data.marks
-        .filter(m => m.status === 'active')
-        .map(m => m.type)
-      if (active.length > 0) {
-        activeMarks = active.join('/')
-      }
-    }
-    // Check for linked tactics
-    if (data.special?.tactics && Array.isArray(data.special.tactics) && data.special.tactics.length > 0) {
-      hasTactics = true
-    }
-  }
-
   // Parse location data
   let directions = null
   let upgradeable = null
@@ -199,8 +235,6 @@ export function getEntityDisplayInfo(entity) {
     salary: data.salary,
     slots: slots,
     tacticStyles: tacticStyles,
-    activeMarks: activeMarks,
-    hasTactics: hasTactics,
     directions: directions,
     upgradeable: upgradeable,
     actionDuration: actionDuration,

@@ -16,8 +16,8 @@
         <span class="name" :title="entity.DisplayName">{{ entity.DisplayName || 'Unnamed' }}</span>
       </div>
       <div class="entity-id">{{ entity.ItemId }}<span v-if="hasFeatureIds" class="feature-dot" title="Has feature_ids">●</span><span v-if="hasDebuffIds" class="debuff-dot" title="Has debuff_ids">●</span></div>
-      <!-- Feature tactic description -->
-      <div v-if="entity.ItemClass === 'feature_tactic' && entity.Description" class="feature-description">
+      <!-- Description (feature tactics, personal connections) -->
+      <div v-if="showsDescription && entity.Description" class="feature-description">
         {{ entity.Description }}
       </div>
       <div class="entity-stats" v-if="hasStats">
@@ -44,11 +44,6 @@
           :key="tag"
           class="player-tag"
         >{{ formatStyle(tag) }}</span>
-      </div>
-      <!-- Staff marks -->
-      <div class="staff-marks" v-if="displayInfo.activeMarks || displayInfo.hasTactics">
-        <span v-if="displayInfo.activeMarks" class="mark">{{ displayInfo.activeMarks }}</span>
-        <span v-if="displayInfo.hasTactics" class="tactics-badge" title="Has linked tactics">📋</span>
       </div>
       <!-- Location info -->
       <div class="location-info" v-if="displayInfo.directions">
@@ -139,18 +134,17 @@ const hasStats = computed(() => {
   return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null
 })
 
+const showsDescription = computed(() =>
+  props.entity.ItemClass === 'feature_tactic' ||
+  props.entity.ItemClass === 'personal_connection'
+)
+
 const hasFeatureIds = computed(() => {
   const cls = props.entity.ItemClass
-  if (cls !== 'player' && cls !== 'tactic' && cls !== 'staff') return false
+  if (cls !== 'player' && cls !== 'tactic') return false
   const raw = parseCustomData(props.entity.CustomData)
   if (!raw) return false
-  if (cls === 'player' || cls === 'tactic') {
-    return Array.isArray(raw.feature_ids) && raw.feature_ids.length > 0
-  }
-  if (cls === 'staff') {
-    return Array.isArray(raw.marks) && raw.marks.some(m => m && m.feature_id)
-  }
-  return false
+  return Array.isArray(raw.feature_ids) && raw.feature_ids.length > 0
 })
 
 const hasDebuffIds = computed(() => {

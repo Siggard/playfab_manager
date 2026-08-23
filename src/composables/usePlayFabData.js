@@ -27,6 +27,62 @@ const state = reactive({
   sortBy: 'name'
 })
 
+// ItemIds are the join key across the whole catalog: bundle membership, feature_ids,
+// debuff_ids keys, team_roster slots, infrastructure location_id and so on. Rather than
+// enumerate every known shape, walk CustomData and match ids exactly, wherever they sit.
+function collectIdPaths(value, itemId, path) {
+  if (typeof value === 'string') {
+    return value === itemId ? [path] : []
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, i) => collectIdPaths(item, itemId, `${path}[${i}]`))
+  }
+
+  if (value && typeof value === 'object') {
+    const hits = []
+    for (const [key, child] of Object.entries(value)) {
+      if (key === itemId) hits.push(`${path}.${key} (key)`)
+      hits.push(...collectIdPaths(child, itemId, `${path}.${key}`))
+    }
+    return hits
+  }
+
+  return []
+}
+
+function replaceIdDeep(value, oldId, newId) {
+  if (typeof value === 'string') {
+    return value === oldId ? newId : value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => replaceIdDeep(item, oldId, newId))
+  }
+
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [key, child] of Object.entries(value)) {
+      out[key === oldId ? newId : key] = replaceIdDeep(child, oldId, newId)
+    }
+    return out
+  }
+
+  return value
+}
+
+// Turn a CustomData path into the label shown in "Assigned To"
+function assignmentTypeForPath(path) {
+  if (path === 'Bundle.BundledItems') return 'bundle'
+  if (path.includes('debuff_ids')) return 'debuff_ref'
+  if (path.includes('infrastructure')) return 'infra_ref'
+  if (path.includes('team_roster')) return 'roster_ref'
+  if (path.includes('.slots[') && path.includes('feature_ids')) return 'slot_ref'
+  if (path.includes('feature_ids') || path.includes('feature_id')) return 'feature_ref'
+  if (path.includes('special.tactics')) return 'tactic_ref'
+  return 'custom_ref'
+}
+
 export function usePlayFabData() {
 
   function loadJSON(jsonData) {
@@ -144,20 +200,19 @@ export function usePlayFabData() {
     // Find prefix based on ItemClass
     const prefixes = {
       player: 'player_',
-      staff: 'staff_',
       team: 'team_',
       tactic: 'tactic_',
       location: 'location_',
       club: 'club_',
       feature_player: 'feature_player_',
-      feature_staff: 'feature_staff_',
       feature_tactic: 'feature_tactic_',
       feature_tactic_slot: 'feature_tactic_slot_',
       bot_bonus: 'bot_bonus_',
       bot_bonus_deck: 'bot_bonus_deck_',
       player_deck: 'player_deck_',
       debuff_player: 'debuff_player_',
-      status_token: 'status_token_'
+      status_token: 'status_token_',
+      personal_connection: 'personal_connection_'
     }
 
     const prefix = prefixes[itemClass] || `${itemClass}_`
@@ -294,65 +349,82 @@ export function usePlayFabData() {
     return Array.from(tags).sort()
   })
 
-  // Find all parents that reference this entity (bundles, feature_ids, debuff_ids, staff marks)
-  function getEntityAssignments(itemId) {
-    const assignments = []
+  // Every place in the catalog that points at this entity, with the exact
+  // CustomData path of each hit so a rename can be previewed before it happens.
+  function findReferences(itemId) {
+    const references = []
 
     for (const entity of state.entities) {
-      // Check BundledItems
+      if (entity.ItemId === itemId) continue
+
+      const paths = []
+
       if (entity.Bundle?.BundledItems?.includes(itemId)) {
-        assignments.push({ type: 'bundle', entity })
-        continue
+        paths.push('Bundle.BundledItems')
       }
 
-      // Check CustomData references
-      if (!entity.CustomData) continue
-      let data
-      try { data = JSON.parse(entity.CustomData) } catch { continue }
-      if (!data || typeof data !== 'object') continue
-
-      const cls = entity.ItemClass
-
-      // Player/Tactic: feature_ids[]
-      if ((cls === 'player' || cls === 'tactic') && Array.isArray(data.feature_ids) && data.feature_ids.includes(itemId)) {
-        assignments.push({ type: 'feature_ref', entity })
-        continue
-      }
-
-      // Tactic: slots[].feature_ids[]
-      if (cls === 'tactic' && Array.isArray(data.slots)) {
-        const found = data.slots.some(s => s && Array.isArray(s.feature_ids) && s.feature_ids.includes(itemId))
-        if (found) {
-          assignments.push({ type: 'slot_ref', entity })
-          continue
+      if (entity.CustomData) {
+        let data
+        try { data = JSON.parse(entity.CustomData) } catch { data = null }
+        if (data && typeof data === 'object') {
+          paths.push(...collectIdPaths(data, itemId, 'CustomData'))
         }
       }
 
-      // Player: debuff_ids {}
-      if (cls === 'player' && data.debuff_ids && typeof data.debuff_ids === 'object') {
-        if (Object.keys(data.debuff_ids).includes(itemId) || Object.values(data.debuff_ids).includes(itemId)) {
-          assignments.push({ type: 'debuff_ref', entity })
-          continue
-        }
-      }
-
-      // Staff: marks[].feature_id
-      if (cls === 'staff' && Array.isArray(data.marks)) {
-        const found = data.marks.some(m => m && m.feature_id === itemId)
-        if (found) {
-          assignments.push({ type: 'mark_ref', entity })
-          continue
-        }
-      }
-
-      // Staff: special.tactics[]
-      if (cls === 'staff' && data.special && Array.isArray(data.special.tactics) && data.special.tactics.includes(itemId)) {
-        assignments.push({ type: 'tactic_ref', entity })
-        continue
-      }
+      if (paths.length > 0) references.push({ entity, paths })
     }
 
-    return assignments
+    return references
+  }
+
+  function getEntityAssignments(itemId) {
+    return findReferences(itemId).map(({ entity, paths }) => ({
+      type: assignmentTypeForPath(paths[0]),
+      entity,
+      paths
+    }))
+  }
+
+  // Rename an ItemId and rewrite every reference to it in the same pass
+  function renameEntity(oldId, newId) {
+    if (oldId === newId) return { ok: false, error: 'The ID is unchanged' }
+
+    const target = state.entities.find(e => e.ItemId === oldId)
+    if (!target) return { ok: false, error: `No entity with ID "${oldId}"` }
+    if (state.entities.some(e => e.ItemId === newId)) {
+      return { ok: false, error: `ID "${newId}" is already taken` }
+    }
+
+    let updatedEntities = 0
+
+    for (const entity of state.entities) {
+      let touched = false
+
+      if (entity.Bundle?.BundledItems?.includes(oldId)) {
+        entity.Bundle.BundledItems = entity.Bundle.BundledItems.map(
+          id => (id === oldId ? newId : id)
+        )
+        touched = true
+      }
+
+      if (entity.CustomData) {
+        let data
+        try { data = JSON.parse(entity.CustomData) } catch { data = null }
+        if (data && typeof data === 'object') {
+          const next = JSON.stringify(replaceIdDeep(data, oldId, newId))
+          if (next !== JSON.stringify(data)) {
+            entity.CustomData = next
+            touched = true
+          }
+        }
+      }
+
+      if (touched) updatedEntities++
+    }
+
+    target.ItemId = newId
+
+    return { ok: true, updatedEntities }
   }
 
   // Check if entity is assigned anywhere (bundles OR references)
@@ -376,6 +448,8 @@ export function usePlayFabData() {
     getBundleEntities,
     isEntityInBundle,
     getEntityAssignments,
+    findReferences,
+    renameEntity,
     isEntityAssigned,
     unassignedEntities,
     filteredEntities,

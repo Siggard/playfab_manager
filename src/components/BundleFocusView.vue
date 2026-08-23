@@ -23,33 +23,144 @@
             <span class="stat-value">{{ balance }}</span>
           </span>
         </div>
-        <!-- Infrastructure (club only) -->
-        <div v-if="isClub && infrastructure" class="infrastructure-row">
-          <span
-            v-for="(info, key) in infrastructure"
-            :key="key"
-            class="infra-item"
-            :class="{ 'has-modules': info.modules.length > 0 }"
-          >
-            <span class="infra-name">{{ formatInfraName(key) }}</span>
-            <span class="infra-level">{{ info.level }}lv</span>
-            <span v-if="info.modules.length > 0" class="infra-modules">
-              [<span
-                v-for="(moduleId, idx) in info.modules"
-                :key="moduleId"
-              ><span
-                  class="module-link"
-                  @click.stop="openModuleEntity(moduleId)"
-                  :title="getModuleDisplayName(moduleId)"
-                >{{ moduleId }}</span><span v-if="idx < info.modules.length - 1">, </span></span>]
-            </span>
-          </span>
-        </div>
       </div>
 
       <button @click="$emit('edit-bundle', bundle)" class="btn-edit-info">
         [=] Edit Info
       </button>
+    </div>
+
+    <!-- Club sub-header: single team, staff counters, infrastructure -->
+    <div v-if="isClub" class="bundle-subheader">
+      <!-- Team: always exactly one -->
+      <div class="sub-row">
+        <span class="sub-label">TEAM</span>
+        <div
+          v-if="teamEntity"
+          class="team-chip"
+          @click="$emit('edit-item', teamEntity)"
+          title="Open team editor"
+        >
+          <span class="team-icon">{{ getTypeIcon('team') }}</span>
+          <span class="team-name">{{ teamEntity.DisplayName || teamEntity.ItemId }}</span>
+          <span class="team-id">{{ teamEntity.ItemId }}</span>
+          <span v-if="teamInfo.power" class="team-stat">&#9889;{{ teamInfo.power }}</span>
+          <span v-if="teamInfo.level" class="team-stat">Lv{{ teamInfo.level }}</span>
+          <span v-if="teamInfo.balance" class="team-stat">&#128176;{{ teamInfo.balance }}</span>
+        </div>
+        <span v-else class="sub-empty">No team assigned</span>
+
+        <div class="sub-actions">
+          <button @click="openQuickAdd('team')" class="btn-sub">
+            {{ teamEntity ? 'Change' : 'Set Team' }}
+          </button>
+          <button
+            v-if="teamEntity"
+            @click="removeFromBundle(teamEntity.ItemId)"
+            class="btn-sub btn-sub-danger"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      <!-- Staff: counters stored in bundle CustomData.staff -->
+      <div class="sub-row">
+        <span class="sub-label">STAFF</span>
+        <div class="staff-counters">
+          <div
+            v-for="role in staffRoles"
+            :key="role"
+            class="staff-counter"
+            :class="{ 'is-zero': !staffCounts[role] }"
+          >
+            <span class="staff-role">{{ role }}</span>
+            <button
+              class="staff-btn"
+              @click="changeStaffCount(role, -1)"
+              :disabled="!staffCounts[role]"
+              title="Decrease"
+            >&minus;</button>
+            <input
+              type="number"
+              min="0"
+              class="staff-value"
+              :value="staffCounts[role]"
+              @change="setStaffCount(role, $event.target.value)"
+            />
+            <button class="staff-btn" @click="changeStaffCount(role, 1)" title="Increase">+</button>
+          </div>
+        </div>
+        <span class="staff-total">total {{ staffTotal }}</span>
+      </div>
+
+      <!-- Reputation: a token on a -10…+10 scale, no zero position -->
+      <div class="sub-row">
+        <span class="sub-label">REP</span>
+        <div class="face-toggle">
+          <button
+            v-for="face in REPUTATION_FACES"
+            :key="face"
+            class="face-btn"
+            :class="[`face-${face}`, { active: reputationFace === face }]"
+            @click="setReputationFace(face)"
+          >{{ face }}</button>
+        </div>
+        <div class="staff-counter rep-counter">
+          <button
+            class="staff-btn"
+            @click="stepReputation(-1)"
+            :disabled="reputationValue <= -REPUTATION_MAX"
+            title="Move token towards negative"
+          >&minus;</button>
+          <input
+            type="number"
+            class="staff-value rep-value"
+            :value="reputationValue"
+            @change="setReputationValue($event.target.value)"
+          />
+          <button
+            class="staff-btn"
+            @click="stepReputation(1)"
+            :disabled="reputationValue >= REPUTATION_MAX"
+            title="Move token towards positive"
+          >+</button>
+        </div>
+        <span class="rep-hint">&minus;{{ REPUTATION_MAX }}…+{{ REPUTATION_MAX }}, no zero</span>
+      </div>
+
+      <!-- Infrastructure: one row of location slots -->
+      <div v-if="infraSlots" class="sub-row">
+        <span class="sub-label">INFRA</span>
+        <div class="infrastructure-row">
+          <span
+            v-for="slot in infraSlots"
+            :key="slot.index"
+            class="infra-slot"
+            :class="`state-${slot.state}`"
+            :title="slotTooltip(slot)"
+          >
+            <span class="slot-index">{{ slot.index }}</span>
+            <span v-if="slot.showState" class="slot-state">{{ slot.state }}</span>
+            <span
+              v-if="slot.locationId"
+              class="slot-location"
+              :class="{ missing: slot.missing }"
+              @click.stop="openSlotLocation(slot)"
+            >{{ slot.locationId }}</span>
+            <span v-if="slot.level" class="slot-level">Lv{{ slot.level }}</span>
+            <span v-if="slot.timer" class="slot-timer">&#9203;{{ slot.timer }}</span>
+          </span>
+        </div>
+
+        <span v-if="unslottedLocations.length > 0" class="infra-warning">
+          not in any slot:
+          <span
+            v-for="(loc, idx) in unslottedLocations"
+            :key="loc.ItemId"
+          ><span class="module-link" @click.stop="$emit('edit-item', loc)">{{ loc.ItemId }}</span><span v-if="idx < unslottedLocations.length - 1">, </span></span>
+        </span>
+      </div>
     </div>
 
     <!-- Progress bar -->
@@ -123,7 +234,6 @@
           :key="group.type"
           :type="group.type"
           :items="group.items"
-          :linked-items="linkedItemsMap[group.type] || []"
           :recommendations="group.recommendations"
           :bundle-id="bundleId"
           @remove-item="removeFromBundle"
@@ -143,7 +253,7 @@
     <div v-if="quickAddType" class="quick-add-modal" @click.self="quickAddType = null">
       <div class="quick-add-content">
         <div class="quick-add-header">
-          <h3>Add {{ formatType(quickAddType) }}</h3>
+          <h3>{{ quickAddSingle ? 'Select' : 'Add' }} {{ formatType(quickAddType) }}</h3>
           <button @click="quickAddType = null" class="btn-close">x</button>
         </div>
 
@@ -168,9 +278,10 @@
             :class="{ 'is-selected': quickAddSelected.includes(item.ItemId) }"
           >
             <input
-              type="checkbox"
+              :type="quickAddSingle ? 'radio' : 'checkbox'"
               :value="item.ItemId"
-              v-model="quickAddSelected"
+              :checked="quickAddSelected.includes(item.ItemId)"
+              @change="toggleQuickAddSelection(item.ItemId)"
             />
             <div class="quick-add-entity-wrapper">
               <EntityCard :entity="item" />
@@ -194,7 +305,7 @@
               class="btn-primary"
               :disabled="quickAddSelected.length === 0"
             >
-              Add Selected
+              {{ quickAddSingle ? 'Select' : 'Add Selected' }}
             </button>
           </div>
         </div>
@@ -209,6 +320,14 @@ import BundleItemGroup from './BundleItemGroup.vue'
 import EntityCard from './EntityCard.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useSettings } from '../composables/useSettings'
+import {
+  getTypeIcon,
+  getEntityDisplayInfo,
+  DEFAULT_STAFF_ROLES,
+  REPUTATION_MAX,
+  REPUTATION_FACES,
+  getReputation
+} from '../utils/entityHelpers'
 
 const props = defineProps({
   bundleId: {
@@ -219,8 +338,8 @@ const props = defineProps({
 
 const emit = defineEmits(['exit', 'edit-bundle', 'edit-item'])
 
-const { state, addEntityToBundle, removeEntityFromBundle, allTags } = usePlayFabData()
-const { getTemplate } = useSettings()
+const { state, addEntityToBundle, removeEntityFromBundle, updateEntity, allTags } = usePlayFabData()
+const { getTemplate, getBundleTemplateForClass } = useSettings()
 
 // Filters
 const searchQuery = ref('')
@@ -252,36 +371,108 @@ const bundleItems = computed(() =>
     .filter(Boolean)
 )
 
-// Collect linked items from bundle items (e.g., tactics from staff's special.tactics)
-const linkedItemsMap = computed(() => {
-  const linked = {} // { itemType: [{ item, sourceItem, sourceType }] }
+// Team: a club holds exactly one, shown in the sub-header instead of a group
+const teamEntity = computed(() =>
+  bundleItems.value.find(item => item.ItemClass === 'team') || null
+)
 
-  bundleItems.value.forEach(item => {
-    if (item.ItemClass === 'staff') {
-      try {
-        const data = JSON.parse(item.CustomData || '{}')
-        if (data.special?.tactics && Array.isArray(data.special.tactics)) {
-          data.special.tactics.forEach(tacticId => {
-            const tacticEntity = state.entities.find(e => e.ItemId === tacticId)
-            if (tacticEntity) {
-              if (!linked['tactic']) linked['tactic'] = []
-              // Avoid duplicates
-              if (!linked['tactic'].some(l => l.item.ItemId === tacticId)) {
-                linked['tactic'].push({
-                  item: tacticEntity,
-                  sourceItem: item,
-                  sourceType: 'staff'
-                })
-              }
-            }
-          })
-        }
-      } catch {}
-    }
-  })
+const teamInfo = computed(() =>
+  teamEntity.value ? getEntityDisplayInfo(teamEntity.value) : {}
+)
 
-  return linked
+// Staff: no longer cards, just counters inside the bundle's own CustomData
+const bundleData = computed(() => {
+  if (!bundle.value?.CustomData) return {}
+  try {
+    return JSON.parse(bundle.value.CustomData) || {}
+  } catch {
+    return {}
+  }
 })
+
+const staffData = computed(() => {
+  const staff = bundleData.value.staff
+  return staff && typeof staff === 'object' && !Array.isArray(staff) ? staff : {}
+})
+
+// Roles come from the bundle template (Settings -> Templates), plus anything
+// already present in this bundle's JSON so nothing gets hidden.
+const staffRoles = computed(() => {
+  const template = getBundleTemplateForClass(bundle.value?.ItemClass)
+  const fromTemplate = template?.customData?.staff
+  const roles = fromTemplate && typeof fromTemplate === 'object'
+    ? Object.keys(fromTemplate)
+    : DEFAULT_STAFF_ROLES
+
+  return [...new Set([...roles, ...Object.keys(staffData.value)])]
+})
+
+const staffCounts = computed(() => {
+  const counts = {}
+  staffRoles.value.forEach(role => {
+    counts[role] = parseInt(staffData.value[role], 10) || 0
+  })
+  return counts
+})
+
+const staffTotal = computed(() =>
+  Object.values(staffCounts.value).reduce((sum, n) => sum + n, 0)
+)
+
+function writeStaffCounts(counts) {
+  if (!bundle.value) return
+
+  const data = { ...bundleData.value, staff: counts }
+  updateEntity(props.bundleId, { CustomData: JSON.stringify(data) })
+}
+
+function setStaffCount(role, value) {
+  const next = Math.max(0, parseInt(value, 10) || 0)
+  writeStaffCounts({ ...staffCounts.value, [role]: next })
+}
+
+function changeStaffCount(role, delta) {
+  setStaffCount(role, (staffCounts.value[role] || 0) + delta)
+}
+
+// Reputation: `value` is the signed position on the scale, `face` is which side of
+// the token is up. They are independent — a positive face can sit at -10.
+const reputation = computed(() => getReputation(bundle.value?.CustomData))
+const reputationValue = computed(() => reputation.value?.value ?? 0)
+const reputationFace = computed(() => reputation.value?.face ?? 'negative')
+
+function writeReputation(patch) {
+  if (!bundle.value) return
+
+  const data = {
+    ...bundleData.value,
+    reputation: {
+      ...(bundleData.value.reputation || {}),
+      value: reputationValue.value,
+      face: reputationFace.value,
+      ...patch
+    }
+  }
+
+  updateEntity(props.bundleId, { CustomData: JSON.stringify(data) })
+}
+
+function setReputationValue(raw) {
+  const parsed = parseInt(raw, 10)
+  const next = Number.isNaN(parsed) ? reputationValue.value : parsed
+  writeReputation({ value: Math.max(-REPUTATION_MAX, Math.min(REPUTATION_MAX, next)) })
+}
+
+function stepReputation(delta) {
+  let next = reputationValue.value + delta
+  if (next === 0) next = delta > 0 ? 1 : -1 // the scale has no zero to land on
+  writeReputation({ value: Math.max(-REPUTATION_MAX, Math.min(REPUTATION_MAX, next)) })
+}
+
+// The face is flipped by hand only — stepping the scale never touches it
+function setReputationFace(face) {
+  writeReputation({ face })
+}
 
 // Get items in any bundle
 const itemsInBundles = computed(() => {
@@ -294,9 +485,10 @@ const itemsInBundles = computed(() => {
   return inBundle
 })
 
-// Non-bundle entities
+// Non-bundle entities. A PlayFab Pull omits the Bundle field entirely on plain
+// items, so test for the absence of BundledItems rather than for an explicit null.
 const nonBundleEntities = computed(() =>
-  state.entities.filter(e => e.Bundle === null)
+  state.entities.filter(e => !e.Bundle?.BundledItems)
 )
 
 // Available types
@@ -352,9 +544,11 @@ const itemGroups = computed(() => {
   const groups = {}
   const bundleType = bundle.value?.ItemClass || 'club'
 
-  // Create groups from existing items
+  // Create groups from existing items ('team' lives in the sub-header for clubs)
   bundleItems.value.forEach(item => {
     const type = item.ItemClass
+    if (isClub.value && type === 'team') return
+
     if (!groups[type]) {
       groups[type] = {
         type,
@@ -366,7 +560,10 @@ const itemGroups = computed(() => {
   })
 
   // Add empty groups for recommended types
-  const defaultTypes = ['team', 'player', 'staff', 'tactic', 'location']
+  const defaultTypes = isClub.value
+    ? ['player', 'tactic', 'personal_connection', 'location']
+    : ['team', 'player', 'tactic', 'location']
+
   defaultTypes.forEach(type => {
     if (!groups[type]) {
       groups[type] = {
@@ -378,7 +575,7 @@ const itemGroups = computed(() => {
   })
 
   // Sort groups by priority
-  const order = ['team', 'player', 'tactic', 'staff', 'location', 'feature']
+  const order = ['team', 'player', 'tactic', 'personal_connection', 'location', 'feature']
 
   return Object.values(groups).sort((a, b) => {
     const aIndex = order.indexOf(a.type)
@@ -419,46 +616,92 @@ const balance = computed(() => {
   return 0
 })
 
-// Infrastructure from bundle CustomData
-const infrastructure = computed(() => {
-  if (!bundle.value?.CustomData) return null
-  try {
-    const data = JSON.parse(bundle.value.CustomData)
-    if (!data.infrastructure) return null
+// Infrastructure: a fixed row of slots, each holding at most one location
+const infraSlots = computed(() => {
+  const slots = bundleData.value.infrastructure?.slots
+  if (!Array.isArray(slots)) return null
 
-    const result = {}
-    for (const [key, value] of Object.entries(data.infrastructure)) {
-      result[key] = {
-        level: value.level || 0,
-        modules: (value.modules || []).map(m => m.id)
-      }
+  return slots.map((slot, i) => {
+    const locationId = slot?.location_id || null
+    const entity = locationId
+      ? state.entities.find(e => e.ItemId === locationId) || null
+      : null
+    const slotState = slot?.state || 'closed'
+
+    return {
+      index: slot?.index ?? i + 1,
+      state: slotState,
+      locationId,
+      entity,
+      // A location_id with no entity behind it is a broken reference
+      missing: !!locationId && !entity,
+      level: parseInt(slot?.level, 10) || 0,
+      timer: slot?.timer ?? null,
+      // 'active with a location' is the self-evident case, name the state otherwise
+      showState: !(slotState === 'active' && locationId)
     }
-    return result
-  } catch {
-    return null
-  }
+  })
 })
 
-function formatInfraName(key) {
-  const names = {
-    training_base: 'Training',
-    academy: 'Academy',
-    main_office: 'Office',
-    stadium: 'Stadium'
+// Location cards sitting in the bundle that no slot points at
+const unslottedLocations = computed(() => {
+  if (!infraSlots.value) return []
+
+  const taken = new Set(infraSlots.value.map(s => s.locationId).filter(Boolean))
+  return bundleItems.value.filter(
+    item => item.ItemClass === 'location' && !taken.has(item.ItemId)
+  )
+})
+
+function slotTooltip(slot) {
+  const parts = [`Slot ${slot.index} — ${slot.state}`]
+  if (slot.missing) {
+    parts.push(`${slot.locationId}: no such entity in the catalog`)
+  } else if (slot.entity) {
+    parts.push(slot.entity.DisplayName || slot.locationId)
   }
-  return names[key] || key
+  if (slot.timer) parts.push(`timer: ${slot.timer}`)
+  return parts.join('\n')
 }
 
-function getModuleDisplayName(moduleId) {
-  const entity = state.entities.find(e => e.ItemId === moduleId)
-  return entity?.DisplayName || moduleId
+function openSlotLocation(slot) {
+  if (slot.entity) emit('edit-item', slot.entity)
 }
 
-function openModuleEntity(moduleId) {
-  const entity = state.entities.find(e => e.ItemId === moduleId)
-  if (entity) {
-    emit('edit-item', entity)
+function writeInfraSlots(slots) {
+  if (!bundle.value) return
+
+  const data = {
+    ...bundleData.value,
+    infrastructure: { ...(bundleData.value.infrastructure || {}), slots }
   }
+
+  updateEntity(props.bundleId, { CustomData: JSON.stringify(data) })
+}
+
+// Slots and location cards are kept in step: a card added to the club takes the
+// first free slot, and removing the card empties the slot it occupied.
+function assignLocationToSlot(locationId) {
+  const slots = bundleData.value.infrastructure?.slots
+  if (!Array.isArray(slots)) return
+  if (slots.some(s => s?.location_id === locationId)) return
+
+  const freeIndex = slots.findIndex(s => !s?.location_id && s?.state !== 'locked')
+  if (freeIndex === -1) return // no room; the warning line reports the leftover card
+
+  writeInfraSlots(slots.map((slot, i) => i === freeIndex
+    ? { ...slot, state: 'active', location_id: locationId, level: slot.level || 1 }
+    : slot))
+}
+
+function clearLocationSlot(locationId) {
+  const slots = bundleData.value.infrastructure?.slots
+  if (!Array.isArray(slots)) return
+  if (!slots.some(s => s?.location_id === locationId)) return
+
+  writeInfraSlots(slots.map(slot => slot?.location_id === locationId
+    ? { ...slot, state: 'closed', location_id: null, level: 0, timer: null }
+    : slot))
 }
 
 // Progress
@@ -546,8 +789,8 @@ function getRecommendations(bundleType, itemType) {
     club: {
       team: { min: 1, max: 1, label: '1' },
       player: { min: 5, max: 7, label: '5-7' },
-      staff: { min: 1, max: 2, label: '1-2' },
       tactic: { min: 1, max: 1, label: '1' },
+      personal_connection: { min: 0, max: 5, label: 'optional' },
       location: { min: 0, max: 5, label: 'optional' }
     }
   }
@@ -558,9 +801,9 @@ function getRecommendations(bundleType, itemType) {
 function formatType(type) {
   const labels = {
     player: 'Players',
-    staff: 'Staff',
     team: 'Team',
     tactic: 'Tactics',
+    personal_connection: 'Личные связи',
     location: 'Locations',
     feature: 'Features',
     club: 'Club'
@@ -575,18 +818,55 @@ function handleDragStart(event, entity) {
 }
 
 function addToBundle(itemId) {
+  const incoming = state.entities.find(e => e.ItemId === itemId)
+
+  if (isClub.value) {
+    // A club holds exactly one team — adding another replaces the current one
+    if (incoming?.ItemClass === 'team' && teamEntity.value && teamEntity.value.ItemId !== itemId) {
+      removeEntityFromBundle(teamEntity.value.ItemId, props.bundleId)
+    }
+  }
+
   addEntityToBundle(itemId, props.bundleId)
+
+  if (isClub.value && incoming?.ItemClass === 'location') {
+    assignLocationToSlot(itemId)
+  }
 }
 
 function removeFromBundle(itemId) {
+  const outgoing = state.entities.find(e => e.ItemId === itemId)
+
   removeEntityFromBundle(itemId, props.bundleId)
+
+  if (isClub.value && outgoing?.ItemClass === 'location') {
+    clearLocationSlot(itemId)
+  }
+}
+
+// Team is a single slot, everything else is a multi-select
+const quickAddSingle = computed(() => isClub.value && quickAddType.value === 'team')
+
+function toggleQuickAddSelection(itemId) {
+  if (quickAddSingle.value) {
+    quickAddSelected.value = [itemId]
+    return
+  }
+
+  const index = quickAddSelected.value.indexOf(itemId)
+  if (index === -1) {
+    quickAddSelected.value.push(itemId)
+  } else {
+    quickAddSelected.value.splice(index, 1)
+  }
 }
 
 function openQuickAdd(type) {
   quickAddType.value = type
   quickAddSearch.value = ''
   quickAddSelected.value = []
-  quickAddOnlyUnassigned.value = true
+  // Teams always live in some club, so swapping one needs the full list
+  quickAddOnlyUnassigned.value = !(isClub.value && type === 'team')
 }
 
 function confirmQuickAdd() {
@@ -687,48 +967,316 @@ onUnmounted(() => {
   margin-left: 4px;
 }
 
-/* Infrastructure */
-.infrastructure-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #e2e8f0;
+/* Sub-header (club): team, staff, infrastructure */
+.bundle-subheader {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 4px 0;
 }
 
-.infra-item {
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 24px;
+}
+
+.sub-row + .sub-row {
+  border-top: 1px solid #f1f5f9;
+}
+
+.sub-label {
+  flex-shrink: 0;
+  width: 44px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.sub-empty {
+  flex: 1;
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.sub-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-sub {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.btn-sub:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.btn-sub-danger:hover {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+/* Team chip */
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 3px solid #ef4444;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.team-chip:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+
+.team-icon {
+  font-size: 13px;
+}
+
+.team-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.team-id {
+  font-size: 11px;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+.team-stat {
+  font-size: 12px;
+  color: #475569;
+}
+
+/* Staff counters */
+.staff-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.staff-counter {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  padding: 4px 8px;
+  padding: 3px 6px 3px 8px;
   background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.staff-counter.is-zero {
+  opacity: 0.55;
+}
+
+.staff-role {
+  font-size: 11px;
+  font-family: monospace;
+  color: #475569;
+  margin-right: 2px;
+}
+
+.staff-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  background: white;
   border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  color: #475569;
+}
+
+.staff-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.staff-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.staff-value {
+  width: 34px;
+  padding: 2px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  color: #1e293b;
+  background: white;
+}
+
+.staff-value:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* Reputation */
+.face-toggle {
+  display: inline-flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.face-btn {
+  padding: 4px 10px;
+  border: none;
+  background: #f1f5f9;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: monospace;
   color: #64748b;
 }
 
-.infra-item.has-modules {
+.face-btn + .face-btn {
+  border-left: 1px solid #e2e8f0;
+}
+
+.face-btn:hover {
+  background: #e2e8f0;
+}
+
+.face-btn.face-negative.active {
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.face-btn.face-positive.active {
+  background: #dcfce7;
+  color: #15803d;
+  font-weight: 600;
+}
+
+.rep-counter {
+  padding: 3px 6px;
+}
+
+.rep-value {
+  width: 46px;
+}
+
+.rep-hint {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-family: monospace;
+}
+
+.staff-total {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Infrastructure slots */
+.infrastructure-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.infra-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.slot-index {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.slot-state {
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.slot-location {
+  font-size: 11px;
+  font-family: monospace;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.slot-location:hover {
+  text-decoration-style: solid;
+}
+
+.slot-location.missing {
+  color: #b91c1c;
+  font-weight: 600;
+  cursor: default;
+  text-decoration: none;
+}
+
+.slot-level,
+.slot-timer {
+  font-size: 11px;
+}
+
+.infra-slot.state-locked {
+  background: #e2e8f0;
+  color: #94a3b8;
+  border-color: #cbd5e1;
+  border-style: dashed;
+}
+
+.infra-slot.state-closed {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.infra-slot.state-negotiating {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.infra-slot.state-deploying {
   background: #dbeafe;
   color: #1e40af;
 }
 
-.infra-name {
-  font-weight: 500;
+.infra-slot.state-active {
+  background: #dcfce7;
+  color: #15803d;
 }
 
-.infra-level {
-  color: #475569;
-}
-
-.infra-item.has-modules .infra-level {
-  color: #1d4ed8;
-}
-
-.infra-modules {
+.infra-warning {
+  margin-left: auto;
   font-size: 11px;
-  color: #3b82f6;
-  font-family: monospace;
+  color: #b45309;
 }
 
 .module-link {

@@ -163,6 +163,35 @@
           </section>
 
           <section class="settings-section">
+            <h3>Legacy Cleanup</h3>
+            <p class="section-desc">
+              <code>staff</code> and <code>feature_staff</code> no longer exist in the game design —
+              staff now lives as counters in the club bundle's <code>CustomData.staff</code>.
+              This removes leftover cards from the loaded catalog (and from any bundle referencing them).
+              Nothing is sent to PlayFab until you Push.
+            </p>
+
+            <div v-if="legacyEntities.length === 0" class="folder-status">
+              <div class="folder-empty">No legacy entities in the loaded catalog.</div>
+            </div>
+
+            <div v-else>
+              <div class="folder-status">
+                <strong>Found:</strong>
+                <span v-for="(count, cls) in legacyCounts" :key="cls" class="legacy-count">
+                  <code>{{ cls }}</code> &times;{{ count }}
+                </span>
+              </div>
+              <div class="data-actions">
+                <button @click="handleCleanupLegacy" class="btn btn-danger">
+                  Delete {{ legacyEntities.length }} legacy {{ legacyEntities.length === 1 ? 'entity' : 'entities' }}
+                </button>
+                <span v-if="legacyCleanupStatus" class="test-ok">{{ legacyCleanupStatus }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section">
             <h3>Export / Import Settings</h3>
             <p class="section-desc">Backup or transfer your templates and preferences</p>
             <div class="data-actions">
@@ -329,7 +358,8 @@ import { ref, reactive, computed } from 'vue'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
 import { usePlayFabSync } from '../composables/usePlayFabSync'
-import { getTypeIcon, typeIcons } from '../utils/entityHelpers'
+import { usePlayFabData } from '../composables/usePlayFabData'
+import { getTypeIcon, typeIcons, deprecatedClasses } from '../utils/entityHelpers'
 
 const emit = defineEmits(['close'])
 
@@ -344,6 +374,7 @@ const {
   refreshPermissionState: refreshImageFolderPermission
 } = useImageManager()
 const { testConnection } = usePlayFabSync()
+const { state, deleteEntity } = usePlayFabData()
 
 const imageFolderSupported = imageFolderIsSupported()
 const folderActionStatus = ref('')
@@ -359,6 +390,36 @@ const tabs = [
   { id: 'data', icon: '[D]', label: 'Data' },
   { id: 'playfab', icon: '[P]', label: 'PlayFab' }
 ]
+
+// Entities of classes that were dropped from the game design
+const legacyCleanupStatus = ref('')
+
+const legacyEntities = computed(() =>
+  state.entities.filter(e => deprecatedClasses.has(e.ItemClass))
+)
+
+const legacyCounts = computed(() => {
+  const counts = {}
+  legacyEntities.value.forEach(e => {
+    counts[e.ItemClass] = (counts[e.ItemClass] || 0) + 1
+  })
+  return counts
+})
+
+function handleCleanupLegacy() {
+  const ids = legacyEntities.value.map(e => e.ItemId)
+  if (ids.length === 0) return
+
+  const summary = Object.entries(legacyCounts.value).map(([cls, n]) => `${cls} x${n}`).join(', ')
+  const ok = confirm(
+    `Delete ${ids.length} legacy entities (${summary})?\n\n` +
+    'They will also be removed from any bundle that references them. This cannot be undone.'
+  )
+  if (!ok) return
+
+  ids.forEach(id => deleteEntity(id))
+  legacyCleanupStatus.value = `Removed ${ids.length} entities`
+}
 
 const playfabTest = reactive({ status: '', error: '' })
 
@@ -775,6 +836,12 @@ function handleResetSettings() {
 
 .checkbox-label input {
   width: auto;
+}
+
+.legacy-count {
+  margin-left: 8px;
+  font-size: 13px;
+  color: #475569;
 }
 
 .data-actions {

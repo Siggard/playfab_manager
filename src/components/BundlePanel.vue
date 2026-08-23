@@ -30,6 +30,16 @@
         <span class="stat-label">📦</span>
         <span class="stat-value">{{ stats.itemCount }}</span>
       </div>
+      <div
+        v-if="stats.reputation"
+        class="stat-item rep-stat"
+        :class="`face-${stats.reputation.face}`"
+        :data-tooltip="`Reputation ${formatReputationValue(stats.reputation.value)}, ${stats.reputation.face} side up`"
+      >
+        <span class="stat-label">⚖</span>
+        <span class="stat-value">{{ formatReputationValue(stats.reputation.value) }}</span>
+        <span class="rep-face">{{ stats.reputation.face === 'positive' ? 'pos' : 'neg' }}</span>
+      </div>
     </div>
 
     <div class="bundle-content">
@@ -60,25 +70,57 @@
 
     <div v-if="isClub" class="bundle-footer">
       <div class="type-counts">
-        <div v-if="stats.playerCount" class="stat-item" data-tooltip="Players">
+        <div
+          v-if="!stats.teamCount"
+          class="stat-item stat-missing"
+          data-tooltip="A club needs exactly one team"
+        >
+          <span class="stat-label">🏆</span>
+          <span class="stat-value">none</span>
+        </div>
+        <div class="stat-item" data-tooltip="Players">
           <span class="stat-label">⚽</span>
           <span class="stat-value">{{ stats.playerCount }}</span>
         </div>
-        <div v-if="stats.staffCount" class="stat-item" data-tooltip="Staff">
-          <span class="stat-label">👔</span>
-          <span class="stat-value">{{ stats.staffCount }}</span>
-        </div>
-        <div v-if="stats.teamCount" class="stat-item" data-tooltip="Teams">
-          <span class="stat-label">🏆</span>
-          <span class="stat-value">{{ stats.teamCount }}</span>
-        </div>
-        <div v-if="stats.tacticCount" class="stat-item" data-tooltip="Tactics">
+        <div class="stat-item" data-tooltip="Tactics">
           <span class="stat-label">📋</span>
           <span class="stat-value">{{ stats.tacticCount }}</span>
         </div>
-        <div v-if="stats.locationCount" class="stat-item" data-tooltip="Locations">
+        <div class="stat-item" data-tooltip="Личные связи">
+          <span class="stat-label">🤝</span>
+          <span class="stat-value">{{ stats.connectionCount }}</span>
+        </div>
+        <div
+          v-if="stats.hasStaff"
+          class="stat-item"
+          :data-tooltip="staffTooltip"
+        >
+          <span class="stat-label">👔</span>
+          <span class="stat-value">{{ stats.staffTotal }}</span>
+        </div>
+        <div
+          v-if="stats.infraTotal"
+          class="stat-item"
+          data-tooltip="Infrastructure slots filled"
+        >
           <span class="stat-label">🏟️</span>
-          <span class="stat-value">{{ stats.locationCount }}</span>
+          <span class="stat-value">{{ stats.infraUsed }}/{{ stats.infraTotal }}</span>
+        </div>
+        <div
+          v-if="stats.brokenSlots"
+          class="stat-item stat-missing"
+          data-tooltip="Slots pointing at an ID with no entity behind it"
+        >
+          <span class="stat-label">⚠</span>
+          <span class="stat-value">{{ stats.brokenSlots }}</span>
+        </div>
+        <div
+          v-if="stats.unslottedLocations"
+          class="stat-item stat-warn"
+          data-tooltip="Location cards that no slot points at"
+        >
+          <span class="stat-label">🏟️?</span>
+          <span class="stat-value">{{ stats.unslottedLocations }}</span>
         </div>
       </div>
     </div>
@@ -91,7 +133,7 @@ import draggable from 'vuedraggable'
 import EntityCard from './EntityCard.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useBundleStats } from '../composables/useBundleStats'
-import { getTypeIcon, getTypeColor, parseCustomData } from '../utils/entityHelpers'
+import { getTypeIcon, getTypeColor, parseCustomData, formatReputationValue } from '../utils/entityHelpers'
 
 const props = defineProps({
   bundle: {
@@ -125,6 +167,15 @@ const panelClasses = computed(() => ({
 }))
 
 const stats = computed(() => getBundleStats(props.bundle.ItemId))
+
+const staffTooltip = computed(() => {
+  const data = parseCustomData(props.bundle.CustomData)
+  const staff = data?.staff
+  if (!staff || typeof staff !== 'object') return 'Staff'
+
+  const parts = Object.entries(staff).map(([role, count]) => `${role}: ${count}`)
+  return `Staff — ${parts.join(', ')}`
+})
 
 // Two-way binding for draggable
 const bundleItems = computed({
@@ -340,6 +391,29 @@ function handleChange(evt) {
   border-radius: 6px;
   color: #9ca3af;
   font-size: 13px;
+}
+
+.rep-stat .rep-face {
+  margin-left: 3px;
+  font-size: 10px;
+  font-family: monospace;
+  opacity: 0.75;
+}
+
+.rep-stat.face-negative {
+  color: #b91c1c;
+}
+
+.rep-stat.face-positive {
+  color: #15803d;
+}
+
+.stat-item.stat-missing {
+  color: #b91c1c;
+}
+
+.stat-item.stat-warn {
+  color: #b45309;
 }
 
 .bundle-footer {

@@ -1,9 +1,13 @@
 import { reactive, watch } from 'vue'
+import { emptyInfraSlots } from '../utils/entityHelpers'
 
 const SETTINGS_KEY = 'playfab-editor-settings'
 
+// ItemClasses dropped from the game design — pruned from saved settings on load
+const DEPRECATED_ITEM_TEMPLATES = ['staff', 'feature_staff']
+
 const defaultSettings = {
-  version: '1.1.0',
+  version: '1.2.0',
 
   templates: {
     items: {
@@ -19,14 +23,11 @@ const defaultSettings = {
         IsStackable: false,
         IsTradable: false
       },
-      staff: {
-        ItemClass: 'staff',
-        DisplayName: 'New Staff Member',
-        CustomData: {
-          level: '1',
-          salary: '1000',
-          specialty: 'coach'
-        },
+      personal_connection: {
+        ItemClass: 'personal_connection',
+        DisplayName: 'New Connection',
+        Description: '',
+        CustomData: {},
         Tags: [],
         IsStackable: false,
         IsTradable: false
@@ -56,11 +57,19 @@ const defaultSettings = {
         ItemClass: 'club',
         DisplayName: 'New Club',
         CustomData: {
+          staff: {
+            coaching_staff: 0,
+            medical_staff: 0,
+            scouting_staff: 0,
+            assistant: 0,
+            secretary: 0
+          },
+          reputation: {
+            value: 0,
+            face: 'negative'
+          },
           infrastructure: {
-            training_base: { level: 1, modules: [] },
-            academy: { level: 0, modules: [] },
-            main_office: { level: 0, modules: [] },
-            stadium: { level: 0, modules: [] }
+            slots: emptyInfraSlots()
           }
         },
         Tags: [],
@@ -103,11 +112,19 @@ const defaultSettings = {
         description: 'Basic club for new players',
         bundleClass: 'club',
         customData: {
+          staff: {
+            coaching_staff: 2,
+            medical_staff: 1,
+            scouting_staff: 0,
+            assistant: 1,
+            secretary: 1
+          },
+          reputation: {
+            value: 0,
+            face: 'negative'
+          },
           infrastructure: {
-            training_base: { level: 1, modules: [{ id: 'loc_gym' }] },
-            academy: { level: 0, modules: [] },
-            main_office: { level: 0, modules: [] },
-            stadium: { level: 0, modules: [] }
+            slots: emptyInfraSlots()
           }
         },
         virtualCurrencies: {
@@ -116,8 +133,8 @@ const defaultSettings = {
         itemRequirements: {
           team: { count: 1, min: 1, max: 1, label: '1' },
           player: { count: 5, min: 5, max: 7, label: '5-7' },
-          staff: { count: 1, min: 1, max: 2, label: '1-2' },
           tactic: { count: 1, min: 1, max: 1, label: '1' },
+          personal_connection: { min: 0, max: 5, label: 'optional' },
           location: { min: 0, max: 5, label: 'optional' }
         }
       },
@@ -182,11 +199,37 @@ export function useSettings() {
         const data = JSON.parse(saved)
         // Merge with defaults to handle new settings
         deepMerge(settings, data)
+        migrateSettings()
       }
       initialized = true
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
+  }
+
+  // Drop entities that no longer exist in the game design from saved settings
+  function migrateSettings() {
+    let changed = false
+
+    for (const id of DEPRECATED_ITEM_TEMPLATES) {
+      if (settings.templates.items[id]) {
+        delete settings.templates.items[id]
+        changed = true
+      }
+    }
+
+    for (const bundle of Object.values(settings.templates.bundles || {})) {
+      for (const id of DEPRECATED_ITEM_TEMPLATES) {
+        if (bundle.itemRequirements?.[id]) {
+          delete bundle.itemRequirements[id]
+          changed = true
+        }
+      }
+    }
+
+    settings.version = defaultSettings.version
+
+    if (changed) saveSettings()
   }
 
   function saveSettings() {
@@ -221,6 +264,7 @@ export function useSettings() {
         try {
           const imported = JSON.parse(e.target.result)
           deepMerge(settings, imported)
+          migrateSettings()
           saveSettings()
           resolve()
         } catch (error) {
@@ -239,6 +283,12 @@ export function useSettings() {
       return settings.templates.bundles[templateId]
     }
     return null
+  }
+
+  // Find the bundle template that describes a given bundle ItemClass
+  function getBundleTemplateForClass(bundleClass) {
+    return Object.values(settings.templates.bundles || {})
+      .find(t => t.bundleClass === bundleClass) || null
   }
 
   function saveTemplate(type, templateId, template) {
@@ -298,6 +348,7 @@ export function useSettings() {
     exportSettings,
     importSettings,
     getTemplate,
+    getBundleTemplateForClass,
     saveTemplate,
     deleteTemplate,
     getItemTemplates,

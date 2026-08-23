@@ -73,20 +73,19 @@ const validationRules = [
     check: (item) => {
       const patterns = {
         player: /^player_\d+$/,
-        staff: /^staff_\d+$/,
         team: /^team_\d+$/,
         club: /^club_\d+$/,
         tactic: /^tactic_\d+$/,
         location: /^location_[a-z0-9_]+$/i,
         feature_player: /^feature_player_\d+$/,
-        feature_staff: /^feature_staff_\d+$/,
         feature_tactic: /^feature_tactic_\d+$/,
         feature_tactic_slot: /^feature_tactic_slot_\d+$/,
         bot_bonus: /^bot_bonus_\d+$/,
         bot_bonus_deck: /^bot_bonus_deck_\d+$/,
         player_deck: /^player_deck_\d+$/,
         debuff_player: /^debuff_player_\d+$/,
-        status_token: /^status_token_\d+$/
+        status_token: /^status_token_\d+$/,
+        personal_connection: /^personal_connection_\d+$/
       }
 
       const pattern = patterns[item.ItemClass]

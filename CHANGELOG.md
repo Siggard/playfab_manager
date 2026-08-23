@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.2.0] - 2026-08-23
+
+Game design dropped staff cards and added personal connections.
+
+### Added
+
+#### Club Bundle Sub-header
+- **TEAM row** - The single team of a club now sits in a compact sub-header row instead of a full item group
+  - Click the chip to open the team editor; shows power, level and balance inline
+  - **Change** opens a single-select picker (radio buttons, shows teams already used by other clubs)
+  - **Remove** detaches the team from the bundle
+  - Adding a team to a club that already has one replaces it, whichever way it is added (drag, double-click, picker)
+- **STAFF row** - Staff counters read from and written to the bundle's own `CustomData.staff`
+  - One `-/+` stepper plus a number field per role, with a running total
+  - Roles come from the bundle template's `customData.staff` (Settings -> Templates), plus any extra key already present in the bundle JSON
+- **REP row** - Club reputation edited inline, in the same visual language as the staff steppers
+  - `value` is the signed position on the scale, `face` is which side of the token is up; the two are independent, so a positive face can sit at -10
+  - The stepper walks -10…+10 and skips 0, never touching the face; the face toggle changes the side by hand, never touching the value
+  - Stored unchanged as `CustomData.reputation = { value, face }`; an existing `value: 0` is displayed as-is rather than migrated
+- **INFRA row** - Rebuilt for the new slot-based infrastructure format
+  - All six slots always shown, colored by state: `locked` / `closed` / `negotiating` / `deploying` / `active`
+  - An occupied slot shows its `location_id` (click opens the card) and level; a `timer` shows when set
+  - A `location_id` with no matching entity is flagged red — currently `pitch` and `boot_room` in every club
+  - Location cards in the bundle that no slot points at are listed as "not in any slot"
+  - Slots and location cards stay in step: adding a location card takes the first free unlocked slot (`active`, level 1), removing it resets that slot to `closed`. Existing data is never rewritten on load — only your edits move slots.
+- **`personal_connection`** entity class ("Личные связи") - name, description and free-form JSON
+  - Own icon/color, ID pattern `personal_connection_N`, item template, and a bundle group of its own
+  - Description is rendered on the card, like feature tactics
+- **Rename an ItemId** - The ID field on an existing entity is still read-only, but a **Rename** button next to it opens a panel that previews every reference that will be rewritten, then rewrites them in one pass
+  - Blocks empty IDs, duplicates and whitespace; warns (without blocking) when the new ID does not match the class prefix
+  - Notes when the entity has no explicit `imagePath`, since an image resolved by the old ID convention will need re-linking
+- **Club bundle card summary** - Reputation chip in the header stats (signed value plus the raised side, colored by face), and the footer counts rebuilt for the current schema
+  - Players, tactics and connections still come from the cards, but staff is now the total of `CustomData.staff` (roles in the tooltip) and locations became filled infrastructure slots as `used/total`
+  - Team count dropped in favour of a red "none" chip when a club has no team at all
+  - Flags slots pointing at an ID with no entity behind it, and location cards that no slot points at
+- **Settings -> Data -> Legacy Cleanup** - Counts leftover `staff` / `feature_staff` entities in the loaded catalog and deletes them (also unlinking them from any bundle) after a confirmation
+
+### Removed
+- **`staff` and `feature_staff` entity classes** - Gone from the class dropdown, item templates, bundle groups, icons and colors
+  - Entities of these classes already in a catalog stay visible (as generic cards) so they can be found and removed
+  - Staff item template and any `staff` bundle requirement are pruned from saved settings on load
+- **Staff-derived UI** - Active marks badge, linked-tactics badge, the salary total in group headers, and the "linked items" mechanism they fed
+
+### Fixed
+- **Reference scanning missed the newer data shapes** - "Assigned To" only knew about `BundledItems`, `feature_ids`, tactic slots and `debuff_ids`, so `infrastructure.slots[].location_id` and `team_roster` references were invisible. Reference lookup now walks CustomData generically and matches IDs wherever they sit, as values or as object keys, reporting the exact path of each hit.
+- **Empty Entity Pool in bundle focus view** - Non-bundle items were matched with `Bundle === null`, but a PlayFab Pull omits the `Bundle` field entirely, leaving the pool and every quick-add list empty. Now matched on the absence of `BundledItems`.
+
+### Changed
+- Club bundle recommendations: `staff: 1-2` replaced by `personal_connection: optional`
+- New clubs start with `staff` counters, a `reputation` block, and six empty infrastructure slots in `CustomData`
+- Dropped the old `infrastructure.{training_base,academy,main_office,stadium}` shape from templates and rendering; no club in the catalog still uses it
+- Settings schema version bumped to 1.2.0
+
+---
+
 ## [1.1.2] - 2026-01-19
 
 ### Added
