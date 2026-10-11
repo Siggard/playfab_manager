@@ -125,7 +125,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useGameProject } from '../composables/useGameProject'
+import { useGameProject, GameFilesConflictError } from '../composables/useGameProject'
 import { usePlayFabData } from '../composables/usePlayFabData'
 
 const {
@@ -174,13 +174,50 @@ async function handleSave() {
   try {
     await saveToGame()
   } catch (e) {
-    alert(e.message)
+    if (!(e instanceof GameFilesConflictError)) {
+      alert(e.message)
+      return
+    }
+    if (!confirm(conflictMessage(e))) {
+      lastStatus.value = ''
+      lastError.value = 'Не сохранено: файлы в игре изменены вне редактора'
+      return
+    }
+    try {
+      await saveToGame({ force: true })
+    } catch (e2) {
+      alert(e2.message)
+    }
   }
+}
+
+function conflictMessage(e) {
+  const list = e.files.map(f => `  • ${f}`).join('\n')
+  if (e.neverSynced) {
+    return (
+      `Редактор ещё не открывал и не сохранял данные этой папки, а в ней уже есть файлы, ` +
+      `которые отличаются от редактора:\n${list}\n\n` +
+      `OK — перезаписать их данными из редактора.\n` +
+      `Отмена — ничего не делать. Чтобы взять данные из игры: 📂 → «Открыть из игры».`
+    )
+  }
+  return (
+    `С момента последнего открытия/сохранения эти файлы изменили вне редактора ` +
+    `(сессия Claude, ручная правка, git pull):\n${list}\n\n` +
+    `Если сохранить, эти изменения пропадут.\n\n` +
+    `OK — всё равно перезаписать.\n` +
+    `Отмена — не сохранять. Потом можно 📂 → «Открыть из игры» ` +
+    `(несохранённые правки редактора при этом заменятся данными из игры).`
+  )
 }
 
 async function handleLoad({ silent = false } = {}) {
   if (hasData.value && !silent) {
-    const ok = confirm('Загрузить данные из проекта игры? Текущее состояние редактора будет заменено.')
+    const ok = confirm(
+      hasUnsavedChanges.value
+        ? 'В редакторе есть изменения, не сохранённые в игру. Они пропадут.\n\nЗагрузить данные из проекта игры?'
+        : 'Загрузить данные из проекта игры? Текущее состояние редактора будет заменено.'
+    )
     if (!ok) return
   }
   try {

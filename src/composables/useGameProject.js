@@ -16,6 +16,10 @@ const DB_NAME = 'playfab-editor-project'
 const DB_VERSION = 1
 const META_STORE = 'meta'
 const HANDLE_KEY = 'projectDirHandle'
+// Hashes of data/catalog files as of the last load/save, kept across reloads so a
+// save can tell whether something else (a Claude session, a teammate's git pull)
+// changed the files since the editor last synced with them.
+const BASELINE_KEY = 'playfab-editor-game-baseline'
 
 let dbInstance = null
 let cachedHandle = null
@@ -28,8 +32,42 @@ const isBusy = ref(false)
 const lastStatus = ref('')
 const lastError = ref('')
 const lastSavedAt = ref(null)
-const savedSignature = ref(null)
-const currentSignature = ref(null)
+const baseline = ref(loadBaseline())    // { fileName: hash } on disk at last sync
+const currentHashes = ref(null)         // { fileName: hash } the editor would write now
+
+// cyrb53 — fast, sync, plenty for change detection
+function hashText(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i)
+    h1 = Math.imul(h1 ^ ch, 2654435761)
+    h2 = Math.imul(h2 ^ ch, 1597334677)
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)
+}
+
+function loadBaseline() {
+  try {
+    return JSON.parse(localStorage.getItem(BASELINE_KEY) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function setBaseline(hashes) {
+  baseline.value = hashes
+  if (hashes) localStorage.setItem(BASELINE_KEY, JSON.stringify(hashes))
+  else localStorage.removeItem(BASELINE_KEY)
+}
+
+function sameHashes(a, b) {
+  if (!a || !b) return false
+  const ka = Object.keys(a)
+  if (ka.length !== Object.keys(b).length) return false
+  return ka.every(k => a[k] === b[k])
+}
 
 async function getDB() {
   if (!dbInstance) {
@@ -201,13 +239,32 @@ export function buildGameFiles(entities) {
   return { files, index, indexText: toJSONText(index) }
 }
 
-function signatureOf(entities) {
+function hashFiles(files, indexText) {
+  const out = {}
+  for (const [name, text] of Object.entries(files)) out[name] = hashText(text)
+  out[INDEX_FILE] = hashText(indexText)
+  return out
+}
+
+function hashesOf(entities) {
   try {
-    const { files } = buildGameFiles(entities)
-    return JSON.stringify(files)
+    const { files, indexText } = buildGameFiles(entities)
+    return hashFiles(files, indexText)
   } catch {
-    // Broken CustomData — still differs from whatever was saved
-    return `invalid:${Date.now()}`
+    // Broken CustomData — never equal to what's on disk
+    return { invalid: String(Date.now()) }
+  }
+}
+
+// Thrown by saveToGame when files on disk changed since the editor last synced
+export class GameFilesConflictError extends Error {
+  constructor(files, { neverSynced }) {
+    super(neverSynced
+      ? `В папке уже есть данные, которые отличаются от редактора: ${files.join(', ')}`
+      : `Файлы изменены вне редактора: ${files.join(', ')}`)
+    this.name = 'GameFilesConflictError'
+    this.files = files
+    this.neverSynced = neverSynced
   }
 }
 
@@ -222,8 +279,9 @@ export function useGameProject() {
 
   const hasUnsavedChanges = computed(() =>
     state.catalogData !== null &&
-    savedSignature.value !== null &&
-    currentSignature.value !== savedSignature.value
+    baseline.value !== null &&
+    currentHashes.value !== null &&
+    !sameHashes(currentHashes.value, baseline.value)
   )
 
   // Track whether the editor differs from what's on disk. Debounced: building the
@@ -237,7 +295,7 @@ export function useGameProject() {
       () => {
         clearTimeout(timer)
         timer = setTimeout(() => {
-          currentSignature.value = signatureOf(state.entities)
+          currentHashes.value = hashesOf(state.entities)
         }, 300)
       },
       { deep: true }
@@ -283,6 +341,7 @@ export function useGameProject() {
     projectName.value = handle.name
     pointsAtCatalog.value = isCatalogDir
     permissionGranted.value = true
+    setBaseline(null) // a different folder — nothing synced with it yet
     return handle.name
   }
 
@@ -293,6 +352,7 @@ export function useGameProject() {
     projectName.value = ''
     pointsAtCatalog.value = false
     permissionGranted.value = false
+    setBaseline(null)
   }
 
   // Resolve data/catalog, asking for permission again if the browser dropped it.
@@ -321,7 +381,8 @@ export function useGameProject() {
         : `${projectName.value}/${CATALOG_SUBPATH.join('/')}`
   )
 
-  async function saveToGame() {
+  // force: overwrite even if the files changed outside the editor
+  async function saveToGame({ force = false } = {}) {
     if (!state.catalogData) throw new Error('Каталог не загружен')
     isBusy.value = true
     lastError.value = ''
@@ -336,10 +397,39 @@ export function useGameProject() {
         try { oldFiles = JSON.parse(oldIndexText).files || [] } catch { oldFiles = [] }
       }
 
+      // Read everything this save could touch
+      const names = new Set([
+        ...Object.keys(files), ...oldFiles, ...Object.keys(baseline.value || {})
+      ])
+      names.delete(INDEX_FILE)
+      const disk = {}
+      for (const name of names) disk[name] = await readTextOrNull(dir, name)
+
+      if (!force) {
+        const base = baseline.value
+        const conflicts = []
+        for (const name of names) {
+          const onDisk = disk[name]
+          const ours = files[name] ?? null
+          if (onDisk === ours) continue // disk already matches — nothing to lose
+          if (base) {
+            // Changed on disk since the last load/save?
+            const was = base[name] ?? null
+            const now = onDisk === null ? null : hashText(onDisk)
+            if (was !== now) conflicts.push(name)
+          } else if (onDisk !== null) {
+            // Never synced with this folder: any differing existing file is at risk
+            conflicts.push(name)
+          }
+        }
+        if (conflicts.length > 0) {
+          throw new GameFilesConflictError(conflicts.sort(naturalCompare), { neverSynced: !base })
+        }
+      }
+
       let written = 0
       for (const [name, text] of Object.entries(files)) {
-        const existing = await readTextOrNull(dir, name)
-        if (existing === text) continue
+        if (disk[name] === text) continue
         await writeText(dir, name, text)
         written++
       }
@@ -358,9 +448,9 @@ export function useGameProject() {
         await writeText(dir, INDEX_FILE, indexText)
       }
 
-      const sig = JSON.stringify(files)
-      savedSignature.value = sig
-      currentSignature.value = sig
+      const hashes = hashFiles(files, indexText)
+      setBaseline(hashes)
+      currentHashes.value = hashes
       lastSavedAt.value = new Date()
 
       const parts = [`${state.entities.length} сущностей в ${index.files.length} файлах`]
@@ -369,7 +459,7 @@ export function useGameProject() {
       lastStatus.value = `Сохранено — ${parts.join(', ')}`
       return { written, removed, files: index.files }
     } catch (e) {
-      lastError.value = e.message
+      if (!(e instanceof GameFilesConflictError)) lastError.value = e.message
       throw e
     } finally {
       isBusy.value = false
@@ -396,9 +486,11 @@ export function useGameProject() {
       }
 
       const catalog = []
+      const diskHashes = { [INDEX_FILE]: hashText(indexText) }
       for (const name of index.files || []) {
         const text = await readTextOrNull(dir, name)
         if (text === null) throw new Error(`Файл ${name} указан в ${INDEX_FILE}, но не найден`)
+        diskHashes[name] = hashText(text)
         let data
         try { data = JSON.parse(text) } catch (e) { throw new Error(`${name}: невалидный JSON (${e.message})`) }
         for (const item of data.items || []) {
@@ -408,9 +500,10 @@ export function useGameProject() {
 
       loadJSON({ CatalogVersion: 'Main', Catalog: catalog })
 
-      const sig = signatureOf(state.entities)
-      savedSignature.value = sig
-      currentSignature.value = sig
+      // Baseline is what's on disk; if it was hand-edited (other formatting),
+      // the dot stays until the next save normalizes it
+      setBaseline(diskHashes)
+      currentHashes.value = hashesOf(state.entities)
       lastSavedAt.value = null
       lastStatus.value = `Загружено ${catalog.length} сущностей из ${index.files.length} файлов`
       return catalog.length

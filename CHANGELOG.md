@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1] - 2026-10-11
+
+### Added
+- **Overwrite protection for "Сохранить в игру"** - the editor remembers what `data/catalog` looked like at the last load/save (file hashes, kept across reloads). If a file changed on disk since then (a Claude session, a hand edit, `git pull`), saving stops and lists the files: overwrite anyway, or cancel and "Открыть из игры"
+  - A file changed outside that already matches what the editor would write is not a conflict
+  - With no sync history for the folder (first save, folder changed), any existing file that differs is reported
+- "Открыть из игры" warns explicitly when the editor has changes not yet saved to the game
+
 ## [1.3.0] - 2026-10-11
 
 PlayFab's legacy catalog caps CustomData at 1000 bytes per item, which location cards with actions/passives outgrew. The game now reads design data from files in its own repo instead of the PlayFab catalog.
