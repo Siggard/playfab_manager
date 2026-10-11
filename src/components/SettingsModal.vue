@@ -359,7 +359,7 @@ import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
 import { usePlayFabSync } from '../composables/usePlayFabSync'
 import { usePlayFabData } from '../composables/usePlayFabData'
-import { getTypeIcon, typeIcons, deprecatedClasses } from '../utils/entityHelpers'
+import { getTypeIcon, typeIcons, deprecatedClasses, isBundleClassName } from '../utils/entityHelpers'
 
 const emit = defineEmits(['close'])
 
@@ -438,8 +438,8 @@ const activeTab = ref('templates')
 
 // Get all item classes from typeIcons config
 const allClasses = computed(() => Object.keys(typeIcons))
-const bundleClasses = computed(() => allClasses.value.filter(c => c.endsWith('_deck') || c === 'club'))
-const itemClasses = computed(() => allClasses.value.filter(c => !c.endsWith('_deck')))
+const bundleClasses = computed(() => allClasses.value.filter(isBundleClassName))
+const itemClasses = computed(() => allClasses.value.filter(c => !isBundleClassName(c)))
 
 // Template Editor State
 const showTemplateEditor = ref(false)

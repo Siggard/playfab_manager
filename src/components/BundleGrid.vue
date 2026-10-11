@@ -60,7 +60,7 @@ import { ref, computed } from 'vue'
 import BundlePanel from './BundlePanel.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useBundleStats } from '../composables/useBundleStats'
-import { getTypeIcon, typeIcons } from '../utils/entityHelpers'
+import { getTypeIcon, typeIcons, isBundleClassName } from '../utils/entityHelpers'
 
 const { state } = usePlayFabData()
 const { globalStats } = useBundleStats()
@@ -72,7 +72,7 @@ const selectedBundleClass = ref('all')
 // Merge bundle classes from loaded data + config
 const bundleClasses = computed(() => {
   const fromData = Array.from(state.bundleClasses)
-  const fromConfig = Object.keys(typeIcons).filter(c => c.endsWith('_deck') || c === 'club')
+  const fromConfig = Object.keys(typeIcons).filter(isBundleClassName)
   return [...new Set([...fromConfig, ...fromData])].sort()
 })
 

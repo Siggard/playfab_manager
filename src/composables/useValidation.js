@@ -1,5 +1,21 @@
 import { computed } from 'vue'
 import { usePlayFabData } from './usePlayFabData'
+import { hiringIssuesForEntity } from '../utils/hiring'
+
+// Hiring board classes report several problems at once; one rule per severity
+function hiringRule(severity) {
+  return {
+    id: `hiring_${severity}`,
+    severity,
+    message: 'Hiring board data',
+    check: (item, allItems) => {
+      const messages = hiringIssuesForEntity(item, allItems)
+        .filter(i => i.severity === severity)
+        .map(i => i.message)
+      return messages.length > 0 ? { message: messages.join('; ') } : null
+    }
+  }
+}
 
 const validationRules = [
   {
@@ -85,7 +101,10 @@ const validationRules = [
         player_deck: /^player_deck_\d+$/,
         debuff_player: /^debuff_player_\d+$/,
         status_token: /^status_token_\d+$/,
-        personal_connection: /^personal_connection_\d+$/
+        personal_connection: /^personal_connection_\d+$/,
+        staff_pack: /^staff_pack_\d+$/,
+        staff_pack_deck: /^staff_pack_deck_\d+$/,
+        dossier: /^dossier_[a-z0-9_]+$/i
       }
 
       const pattern = patterns[item.ItemClass]
@@ -129,7 +148,9 @@ const validationRules = [
         return null // Invalid JSON handled by json_syntax rule
       }
     }
-  }
+  },
+  hiringRule('error'),
+  hiringRule('warning')
 ]
 
 export function useValidation() {

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0] - 2026-10-12
+
+Hiring board (game issue #39).
+
+### Added
+- **`staff_pack`**, **`dossier`**, **`staff_pack_deck`** entity classes - icons, colors, ID patterns, item templates
+- **Structured fields** above Custom Data for these classes; they edit the JSON, unknown keys are kept
+  - Pack: Dossier dropdown (existing dossiers, unique ones marked), staff token counters for the five staff types, optional reputation threshold (no key = no threshold, 0 is a real one), signing fee, "copy tokens from the Dossier"
+  - Dossier: kind, rarity, contract weeks, payroll, reputation on join/leave, staff leaving with the card, ability type with default params; lists the packs that use it
+  - Deck: rows of pack + count (number / "players" / "players-1"), add/remove
+- **Validation** for these classes in the editor and the warnings dashboard: missing/wrong Dossier or pack references, bad counts, unknown staff types or effect types, and a unique Dossier with count other than 1
+
+### Changed
+- `staff_pack_deck` is not a bundle despite the `_deck` suffix: it is created and edited as a plain entity (`isBundleClassName`)
+
 ## [1.3.1] - 2026-10-11
 
 ### Added

@@ -13,7 +13,20 @@ export const typeIcons = {
   player_deck: '🂠',
   debuff_player: '💀',
   status_token: '🎫',
-  personal_connection: '🤝'
+  personal_connection: '🤝',
+  staff_pack: '🧳',
+  dossier: '📁',
+  staff_pack_deck: '🗂️'
+}
+
+// "*_deck" classes are bundles (cards listed in Bundle.BundledItems) — except these,
+// which keep their contents in CustomData and are edited as plain entities
+export const nonBundleDeckClasses = new Set(['staff_pack_deck'])
+
+// Class name is a bundle type (club or a bundle deck)
+export function isBundleClassName(itemClass) {
+  return itemClass === 'club' ||
+    (itemClass.endsWith('_deck') && !nonBundleDeckClasses.has(itemClass))
 }
 
 // Classes removed from the game design; hidden from creation UI but still
@@ -87,7 +100,10 @@ export const typeColors = {
   player_deck: '#2563EB',   // royal blue
   debuff_player: '#DC2626',  // red
   status_token: '#84CC16',   // lime
-  personal_connection: '#14B8A6' // teal
+  personal_connection: '#14B8A6', // teal
+  staff_pack: '#0EA5E9',     // sky
+  dossier: '#A16207',        // amber-brown
+  staff_pack_deck: '#0369A1' // darker sky
 }
 
 // Get icon for entity type

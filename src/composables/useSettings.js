@@ -81,6 +81,44 @@ const defaultSettings = {
         IsStackable: false,
         IsTradable: false
       },
+      staff_pack: {
+        ItemClass: 'staff_pack',
+        DisplayName: 'New Staff Pack',
+        CustomData: {
+          dossier: '',
+          staff: {},
+          signing_fee: 0
+        },
+        Tags: [],
+        IsStackable: false,
+        IsTradable: false
+      },
+      dossier: {
+        ItemClass: 'dossier',
+        DisplayName: 'New Dossier',
+        Description: '',
+        CustomData: {
+          kind: 'skill',
+          rarity: 'common',
+          contract_weeks: 12,
+          payroll: 1,
+          on_join: { reputation: 1 },
+          on_leave: { reputation: -2, staff: {} }
+        },
+        Tags: [],
+        IsStackable: false,
+        IsTradable: false
+      },
+      staff_pack_deck: {
+        ItemClass: 'staff_pack_deck',
+        DisplayName: 'New Staff Pack Deck',
+        CustomData: {
+          packs: []
+        },
+        Tags: [],
+        IsStackable: false,
+        IsTradable: false
+      },
       bot_bonus: {
         ItemClass: 'bot_bonus',
         DisplayName: 'New Bot Bonus',

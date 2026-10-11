@@ -172,6 +172,14 @@
           ></textarea>
         </div>
 
+        <!-- Structured fields for the hiring board classes; edits the JSON below -->
+        <HiringFields
+          v-if="hasHiringFields(form.ItemClass)"
+          v-model="form.CustomData"
+          :item-class="form.ItemClass"
+          :item-id="form.ItemId"
+        />
+
         <div class="form-group">
           <label>
             Custom Data (JSON)
@@ -407,7 +415,9 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useSettings } from '../composables/useSettings'
 import { useImageManager } from '../composables/useImageManager'
-import { getTypeIcon, isValidJSON, typeIcons, isDeprecatedClass } from '../utils/entityHelpers'
+import { getTypeIcon, isValidJSON, typeIcons, isDeprecatedClass, isBundleClassName } from '../utils/entityHelpers'
+import HiringFields from './HiringFields.vue'
+import { hasHiringFields } from '../utils/hiring'
 import ImageUploader from './ImageUploader.vue'
 import EntityCard from './EntityCard.vue'
 
@@ -500,7 +510,7 @@ function confirmRename() {
 // Merge classes from loaded data + config (typeIcons is the source of truth)
 const itemClasses = computed(() => {
   const fromData = Array.from(state.itemClasses)
-  const fromConfig = Object.keys(typeIcons).filter(c => !c.endsWith('_deck'))
+  const fromConfig = Object.keys(typeIcons).filter(c => !isBundleClassName(c))
   return [...new Set([...fromConfig, ...fromData])]
     .filter(c => !isDeprecatedClass(c))
     .sort()

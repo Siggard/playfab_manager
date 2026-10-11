@@ -302,7 +302,7 @@ import { ref, computed } from 'vue'
 import EntityCard from './EntityCard.vue'
 import EntityThumbnail from './EntityThumbnail.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
-import { getTypeIcon, getTypeColor, getEntityDisplayInfo, typeIcons } from '../utils/entityHelpers'
+import { getTypeIcon, getTypeColor, getEntityDisplayInfo, typeIcons, isBundleClassName } from '../utils/entityHelpers'
 
 const { state, entityClasses: dataEntityClasses, isEntityInBundle, getEntityAssignments, isEntityAssigned } = usePlayFabData()
 
@@ -312,7 +312,7 @@ const { state, entityClasses: dataEntityClasses, isEntityInBundle, getEntityAssi
 const entityClasses = computed(() => {
   const fromData = new Set(dataEntityClasses.value)
   for (const cls of Object.keys(typeIcons)) {
-    if (cls.endsWith('_deck')) continue
+    if (isBundleClassName(cls)) continue
     if (state.bundleClasses.has(cls)) continue
     fromData.add(cls)
   }

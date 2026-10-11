@@ -212,7 +212,10 @@ export function usePlayFabData() {
       player_deck: 'player_deck_',
       debuff_player: 'debuff_player_',
       status_token: 'status_token_',
-      personal_connection: 'personal_connection_'
+      personal_connection: 'personal_connection_',
+      staff_pack: 'staff_pack_',
+      dossier: 'dossier_',
+      staff_pack_deck: 'staff_pack_deck_'
     }
 
     const prefix = prefixes[itemClass] || `${itemClass}_`
