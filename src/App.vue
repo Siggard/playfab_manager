@@ -4,7 +4,7 @@
     <header class="app-header">
       <div class="header-left">
         <h1>PlayFab Bundle Editor</h1>
-        <span class="version">v1.2</span>
+        <span class="version">v1.3</span>
       </div>
       <div class="header-center" v-if="isLoaded">
         <!-- Undo/Redo controls -->
@@ -43,6 +43,7 @@
         <button v-if="isLoaded" @click="openBundleCreator" class="btn-header">
           + Bundle
         </button>
+        <GameProjectSync />
         <FileUploader @loaded="handleLoaded" />
         <ExportButton />
         <PlayFabSync />
@@ -114,7 +115,10 @@
       </div>
       <div class="welcome-content">
         <h2>Welcome to PlayFab Bundle Editor</h2>
-        <p>Load a PlayFab catalog JSON file to get started.</p>
+        <p>
+          Откройте данные из проекта игры: кнопка <strong>📂</strong> вверху → «Открыть из игры».
+          Можно также загрузить JSON-файл каталога или сделать Pull из PlayFab.
+        </p>
         <div class="welcome-features">
           <div class="feature">
             <span class="feature-icon">📦</span>
@@ -187,6 +191,7 @@ import WarningsDashboard from './components/WarningsDashboard.vue'
 import BundleFocusView from './components/BundleFocusView.vue'
 import EntityBrowser from './components/EntityBrowser.vue'
 import PlayFabSync from './components/PlayFabSync.vue'
+import GameProjectSync from './components/GameProjectSync.vue'
 import { usePlayFabData } from './composables/usePlayFabData'
 import { useSettings } from './composables/useSettings'
 import { useHistory } from './composables/useHistory'

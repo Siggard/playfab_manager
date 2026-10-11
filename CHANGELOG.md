@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0] - 2026-10-11
+
+PlayFab's legacy catalog caps CustomData at 1000 bytes per item, which location cards with actions/passives outgrew. The game now reads design data from files in its own repo instead of the PlayFab catalog.
+
+### Added
+- **Save to game project** - writes the catalog into `<game project>/data/catalog/`: `index.json` plus one `<ItemClass>.json` per class, items sorted by `ItemId`, `CustomData` as a JSON object
+  - Pick the game project root (with `project.godot`) once; the folder handle is remembered
+  - "Сохранить в игру" button and Ctrl+S; a yellow dot marks changes not yet saved to the project
+  - Only changed files are rewritten; a class file dropped from the index is removed; invalid CustomData blocks the save
+- **Open from game project** - loads `data/catalog` back into the editor
+- Setup dialog explaining where each file goes
+
+### Changed
+- PlayFab Pull/Push kept only for the migration period
+
 ## [1.2.0] - 2026-08-23
 
 Game design dropped staff cards and added personal connections.
