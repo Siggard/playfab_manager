@@ -13,7 +13,10 @@ Hiring board (game issue #39).
 - **Validation** for these classes in the editor and the warnings dashboard: missing/wrong Dossier or pack references, bad counts, unknown staff types or effect types, and a unique Dossier with count other than 1
 
 ### Changed
-- `staff_pack_deck` is not a bundle despite the `_deck` suffix: it is created and edited as a plain entity (`isBundleClassName`)
+- **Staff pack decks sit in the bundle grid** next to the other decks, though they keep their packs in `CustomData.packs` (copies need a count like `"players-1"`, which `BundledItems` can't express)
+  - Drag packs in from the pool and out again; anything but a staff pack is refused
+  - Each pack has its own count control; the header shows total copies for 1 / 2 / 4 players
+  - Packs in a deck count as assigned and leave the pool, like cards in a bundle
 
 ## [1.3.1] - 2026-10-11
 

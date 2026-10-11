@@ -98,7 +98,7 @@ import EntityCard from './EntityCard.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { getTypeIcon } from '../utils/entityHelpers'
 
-const { state, filteredEntities, unassignedEntities, entityClasses, allTags } = usePlayFabData()
+const { state, filteredEntities, unassignedEntities, entityClasses, allTags, isContainerEntity } = usePlayFabData()
 
 defineEmits(['edit', 'create'])
 
@@ -109,7 +109,7 @@ const displayedEntities = computed(() => {
   let entities = showOnlyUnassigned.value ? unassignedEntities.value : state.entities
 
   // Exclude bundles themselves
-  entities = entities.filter(e => !state.bundleClasses.has(e.ItemClass) || !e.Bundle?.BundledItems)
+  entities = entities.filter(e => !isContainerEntity(e))
 
   // Apply type filter
   if (state.filters.type !== 'all') {
@@ -152,7 +152,7 @@ const displayedEntities = computed(() => {
 // Apply type/search/tag filters (without unassigned toggle) for stats
 function applyFilters(entities) {
   // Exclude bundles themselves
-  let result = entities.filter(e => !state.bundleClasses.has(e.ItemClass) || !e.Bundle?.BundledItems)
+  let result = entities.filter(e => !isContainerEntity(e))
 
   if (state.filters.type !== 'all') {
     result = result.filter(e => e.ItemClass === state.filters.type)

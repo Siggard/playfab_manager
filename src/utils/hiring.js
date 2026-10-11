@@ -163,3 +163,22 @@ export function hiringIssuesForEntity(entity, allItems) {
   const data = parse(entity)
   return data ? hiringIssues(entity.ItemClass, data, allItems) : []
 }
+
+// staff_pack_deck keeps its contents in CustomData.packs: [{ pack, count }]
+export function getDeckEntries(deck) {
+  const packs = parse(deck)?.packs
+  return Array.isArray(packs) ? packs : []
+}
+
+// CustomData string for the deck with packs replaced; other keys kept as-is
+export function withDeckEntries(deck, entries) {
+  const data = parse(deck) || {}
+  return JSON.stringify({ ...data, packs: entries })
+}
+
+// Copies a count turns into for a given number of people in the session
+export function deckCopies(count, players) {
+  if (count === 'players') return players
+  if (count === 'players-1') return Math.max(1, players - 1)
+  return Number.isInteger(count) ? count : 0
+}

@@ -1,4 +1,6 @@
 import { reactive, computed } from 'vue'
+import { nonBundleDeckClasses } from '../utils/entityHelpers'
+import { getDeckEntries } from '../utils/hiring'
 
 const state = reactive({
   // Original JSON data
@@ -275,18 +277,27 @@ export function usePlayFabData() {
       .filter(Boolean)
   }
 
-  // Check if entity is in any bundle
+  // Check if entity is in any bundle (or a deck that keeps its cards in CustomData)
   function isEntityInBundle(itemId) {
     return state.bundles.some(bundle =>
       bundle.Bundle?.BundledItems?.includes(itemId)
+    ) || state.entities.some(e =>
+      nonBundleDeckClasses.has(e.ItemClass) &&
+      getDeckEntries(e).some(entry => entry?.pack === itemId)
     )
+  }
+
+  // Containers are shown in the bundle grid, not in the entity pool
+  function isContainerEntity(e) {
+    return (state.bundleClasses.has(e.ItemClass) && !!e.Bundle?.BundledItems) ||
+      nonBundleDeckClasses.has(e.ItemClass)
   }
 
   // Get unassigned entities (not in any bundle and not a bundle itself)
   const unassignedEntities = computed(() => {
     return state.entities.filter(e => {
       // Skip bundles themselves
-      if (state.bundleClasses.has(e.ItemClass) && e.Bundle?.BundledItems) {
+      if (isContainerEntity(e)) {
         return false
       }
 
@@ -454,6 +465,7 @@ export function usePlayFabData() {
     findReferences,
     renameEntity,
     isEntityAssigned,
+    isContainerEntity,
     unassignedEntities,
     filteredEntities,
     entityClasses,

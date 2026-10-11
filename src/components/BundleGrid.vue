@@ -19,7 +19,7 @@
         :class="{ active: selectedBundleClass === 'all' }"
         @click="selectedBundleClass = 'all'"
       >
-        All ({{ state.bundles.length }})
+        All ({{ state.bundles.length + packDecks.length }})
       </button>
       <button
         v-for="cls in bundleClasses"
@@ -48,7 +48,15 @@
         @focus="$emit('focus', $event)"
       />
 
-      <div v-if="filteredBundles.length === 0" class="no-bundles">
+      <!-- Decks that keep their cards in CustomData (with copy counts) -->
+      <StaffPackDeckPanel
+        v-for="deck in filteredPackDecks"
+        :key="deck.ItemId"
+        :deck="deck"
+        @edit="$emit('edit', $event)"
+      />
+
+      <div v-if="filteredBundles.length === 0 && filteredPackDecks.length === 0" class="no-bundles">
         No bundles found
       </div>
     </div>
@@ -58,9 +66,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BundlePanel from './BundlePanel.vue'
+import StaffPackDeckPanel from './StaffPackDeckPanel.vue'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { useBundleStats } from '../composables/useBundleStats'
-import { getTypeIcon, typeIcons, isBundleClassName } from '../utils/entityHelpers'
+import { getTypeIcon, typeIcons, isBundleClassName, nonBundleDeckClasses } from '../utils/entityHelpers'
 
 const { state } = usePlayFabData()
 const { globalStats } = useBundleStats()
@@ -73,8 +82,18 @@ const selectedBundleClass = ref('all')
 const bundleClasses = computed(() => {
   const fromData = Array.from(state.bundleClasses)
   const fromConfig = Object.keys(typeIcons).filter(isBundleClassName)
-  return [...new Set([...fromConfig, ...fromData])].sort()
+  return [...new Set([...fromConfig, ...fromData, ...nonBundleDeckClasses])].sort()
 })
+
+const packDecks = computed(() =>
+  state.entities.filter(e => nonBundleDeckClasses.has(e.ItemClass))
+)
+
+const filteredPackDecks = computed(() =>
+  selectedBundleClass.value === 'all'
+    ? packDecks.value
+    : packDecks.value.filter(d => d.ItemClass === selectedBundleClass.value)
+)
 
 const filteredBundles = computed(() => {
   if (selectedBundleClass.value === 'all') {
@@ -84,7 +103,8 @@ const filteredBundles = computed(() => {
 })
 
 function getBundleCountByClass(cls) {
-  return state.bundles.filter(b => b.ItemClass === cls).length
+  return state.bundles.filter(b => b.ItemClass === cls).length +
+    packDecks.value.filter(d => d.ItemClass === cls).length
 }
 </script>
 
