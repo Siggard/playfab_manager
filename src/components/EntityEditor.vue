@@ -203,9 +203,9 @@
           </div>
         </div>
 
-        <!-- Linked Features (for players) -->
+        <!-- Linked Features (players, tactics) / Dossier (staff packs) / packs (staff pack decks) -->
         <div v-if="linkedFeatures.length > 0" class="form-group linked-features">
-          <label>Linked Features</label>
+          <label>{{ linkedTitle }}</label>
           <div class="features-list">
             <div
               v-for="link in linkedFeatures"
@@ -522,11 +522,23 @@ const linkedFeatures = computed(() => {
   if (!props.entity || props.isNew) return []
 
   const itemClass = props.entity.ItemClass
-  if (itemClass !== 'player' && itemClass !== 'tactic') return []
+  if (!['player', 'tactic', 'staff_pack', 'staff_pack_deck'].includes(itemClass)) return []
 
   try {
     const data = JSON.parse(props.entity.CustomData || '{}')
     const features = []
+
+    if (itemClass === 'staff_pack') {
+      // Pack: the Dossier card it brings
+      const dossier = state.entities.find(e => e.ItemId === data.dossier)
+      if (dossier) features.push({ position: 'ДОСЬЕ', entity: dossier })
+    } else if (itemClass === 'staff_pack_deck') {
+      // Deck: its packs with copy counts
+      for (const entry of Array.isArray(data.packs) ? data.packs : []) {
+        const pack = state.entities.find(e => e.ItemId === entry?.pack)
+        if (pack) features.push({ position: `ПАК × ${formatDeckCount(entry.count)}`, entity: pack })
+      }
+    }
 
     if (itemClass === 'player') {
       // Player: features in top-level feature_ids array
@@ -580,6 +592,17 @@ const linkedFeatures = computed(() => {
     return []
   }
 })
+
+const linkedTitle = computed(() => ({
+  staff_pack: 'Досье пака',
+  staff_pack_deck: 'Паки в колоде'
+})[props.entity?.ItemClass] || 'Linked Features')
+
+function formatDeckCount(count) {
+  if (count === 'players') return 'игроков'
+  if (count === 'players-1') return 'игроков − 1'
+  return count
+}
 
 const linkedDebuffs = computed(() => {
   if (!props.entity || props.isNew) return []

@@ -17,6 +17,7 @@ Hiring board (game issue #39).
   - Drag packs in from the pool and out again; anything but a staff pack is refused
   - Each pack has its own count control; the header shows total copies for 1 / 2 / 4 players
   - Packs in a deck count as assigned and leave the pool, like cards in a bundle
+- **Linked cards** in the entity editor, like Linked Features for players: a pack links to its Dossier, a staff pack deck to its packs (with counts); click opens the card. The reverse links (Dossier → pack, pack → deck) come from Assigned To
 
 ## [1.3.1] - 2026-10-11
 
