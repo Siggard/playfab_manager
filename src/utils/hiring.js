@@ -29,14 +29,6 @@ export const DOSSIER_RARITIES = [
   { value: 'unique', label: 'Уникальная' }
 ]
 
-// Known effect types and their params with defaults. The game adds code for a type
-// together with the first card that needs it, so unknown types are kept as-is.
-export const DOSSIER_EFFECTS = {
-  injury_diagnosis_precision: { label: 'Точность диагноза травм', params: { window_reduction: 1 } },
-  hearing_ban_reduction: { label: 'Сокращение дисквалификации на слушании', params: {} },
-  reputation_loss_shield: { label: 'Нет падения репутации при поражении от сильного', params: { power_gap: 10 } }
-}
-
 // count in a deck entry: a number, "players" or "players-1" (never below 1)
 export const DECK_COUNT_MODES = [
   { value: 'number', label: 'Число' },
@@ -114,8 +106,6 @@ export function hiringIssues(itemClass, data, allItems) {
     checkStaff(data.on_leave?.staff, 'on_leave.staff')
     if (data.effect && !data.effect.type) {
       issues.push({ severity: 'error', message: 'effect: не указан type' })
-    } else if (data.effect && !DOSSIER_EFFECTS[data.effect.type]) {
-      issues.push({ severity: 'warning', message: `effect: тип «${data.effect.type}» пока неизвестен игре` })
     }
   }
 

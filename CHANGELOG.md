@@ -8,9 +8,9 @@ Hiring board (game issue #39).
 - **`staff_pack`**, **`dossier`**, **`staff_pack_deck`** entity classes - icons, colors, ID patterns, item templates
 - **Structured fields** above Custom Data for these classes; they edit the JSON, unknown keys are kept
   - Pack: Dossier dropdown (existing dossiers, unique ones marked), staff token counters for the five staff types, optional reputation threshold (no key = no threshold, 0 is a real one), signing fee, "copy tokens from the Dossier"
-  - Dossier: kind, rarity, contract weeks, payroll, reputation on join/leave, staff leaving with the card, ability type with default params; lists the packs that use it
+  - Dossier: kind, rarity, contract weeks, payroll, reputation on join/leave, staff leaving with the card; lists the packs that use it. `effect` is written by hand in Custom Data
   - Deck: rows of pack + count (number / "players" / "players-1"), add/remove
-- **Validation** for these classes in the editor and the warnings dashboard: missing/wrong Dossier or pack references, bad counts, unknown staff types or effect types, and a unique Dossier with count other than 1
+- **Validation** for these classes in the editor and the warnings dashboard: missing/wrong Dossier or pack references, bad counts, unknown staff types, and a unique Dossier with count other than 1
 
 ### Changed
 - **Staff pack decks sit in the bundle grid** next to the other decks, though they keep their packs in `CustomData.packs` (copies need a count like `"players-1"`, which `BundledItems` can't express)

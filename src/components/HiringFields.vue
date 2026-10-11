@@ -116,33 +116,6 @@
         </label>
       </div>
 
-      <span class="hf-label">Способность</span>
-      <div class="hf-effect">
-        <select :value="data.effect?.type || ''" @change="setEffectType($event.target.value)">
-          <option value="">— нет —</option>
-          <option
-            v-if="data.effect?.type && !DOSSIER_EFFECTS[data.effect.type]"
-            :value="data.effect.type"
-          >
-            {{ data.effect.type }} (неизвестный)
-          </option>
-          <option v-for="(e, type) in DOSSIER_EFFECTS" :key="type" :value="type">
-            {{ e.label }} ({{ type }})
-          </option>
-        </select>
-        <label v-for="(value, key) in (data.effect?.params || {})" :key="key" class="hf-param">
-          <span>{{ key }}</span>
-          <input
-            v-if="typeof value === 'number'"
-            type="number"
-            class="hf-num"
-            :value="value"
-            @change="set(['effect', 'params', key], toInt($event.target.value))"
-          />
-          <code v-else>{{ JSON.stringify(value) }}</code>
-        </label>
-      </div>
-
       <template v-if="packsUsingThis.length > 0">
         <span class="hf-label">В паках</span>
         <div class="hf-note">
@@ -203,7 +176,6 @@ import {
   STAFF_TYPE_LABELS,
   DOSSIER_KINDS,
   DOSSIER_RARITIES,
-  DOSSIER_EFFECTS,
   DECK_COUNT_MODES,
   hiringIssues
 } from '../utils/hiring'
@@ -335,18 +307,6 @@ function copyStaffFromDossier() {
   update(obj => { obj.staff = { ...staff } })
 }
 
-function setEffectType(type) {
-  update(obj => {
-    if (!type) {
-      delete obj.effect
-      return
-    }
-    if (obj.effect?.type === type) return
-    const defaults = DOSSIER_EFFECTS[type]?.params || {}
-    obj.effect = { type, params: { ...defaults } }
-  })
-}
-
 function countMode(count) {
   return count === 'players' || count === 'players-1' ? count : 'number'
 }
@@ -415,8 +375,7 @@ function removeDeckRow(i) {
   background: white;
 }
 
-.hf-inline select,
-.hf-effect select {
+.hf-inline select {
   flex: 1 1 180px;
   min-width: 0;
 }
@@ -454,21 +413,6 @@ function removeDeckRow(i) {
   align-items: center;
   gap: 4px;
   font-size: 13px;
-}
-
-.hf-effect {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.hf-param {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #334155;
 }
 
 .hf-note {
