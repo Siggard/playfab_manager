@@ -16,7 +16,8 @@ export const typeIcons = {
   personal_connection: '🤝',
   staff_pack: '🧳',
   dossier: '📁',
-  staff_pack_deck: '🗂️'
+  staff_pack_deck: '🗂️',
+  contract: '📝'
 }
 
 // "*_deck" classes are bundles (cards listed in Bundle.BundledItems) — except these,
@@ -103,7 +104,8 @@ export const typeColors = {
   personal_connection: '#14B8A6', // teal
   staff_pack: '#0EA5E9',     // sky
   dossier: '#A16207',        // amber-brown
-  staff_pack_deck: '#0369A1' // darker sky
+  staff_pack_deck: '#0369A1', // darker sky
+  contract: '#0D9488'        // teal
 }
 
 // Get icon for entity type

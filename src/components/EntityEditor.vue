@@ -1,9 +1,19 @@
 <template>
   <div class="modal-overlay">
-    <div class="modal-container" :class="{ 'with-help': showHelp }">
+    <div class="modal-container" :class="{ 'with-help': showHelp || showContract }">
       <div class="modal-content">
         <div class="modal-header">
           <h3>{{ isNew ? 'Create New Entity' : 'Edit Entity' }}</h3>
+          <button
+            v-if="!isNew && form.ItemClass === 'player'"
+            type="button"
+            class="btn-contract"
+            :class="{ active: showContract, missing: !playerContract && !!playerClub }"
+            :title="playerContractTitle"
+            @click="toggleContract"
+          >
+            📝 {{ playerContractLabel }} →
+          </button>
           <button class="close-btn" @click="$emit('close')">×</button>
         </div>
 
@@ -180,6 +190,15 @@
           :item-id="form.ItemId"
         />
 
+        <!-- Structured fields for a contract; edits the JSON below -->
+        <div v-if="form.ItemClass === 'contract'" class="form-group">
+          <label>
+            Контракт
+            <span class="label-hint">поля меняют Custom Data ниже</span>
+          </label>
+          <ContractFields v-model="form.CustomData" :item-id="form.ItemId" />
+        </div>
+
         <div class="form-group">
           <label>
             Custom Data (JSON)
@@ -292,6 +311,16 @@
         </button>
       </div>
     </div>
+
+    <!-- Contract panel (players) -->
+    <ContractPanel
+      v-if="showContract && entity && !isNew"
+      :player="entity"
+      :contract-id="playerContractId"
+      @close="showContract = false"
+      @linked="handleContractLinked"
+      @open-entity="openLinkedFeature"
+    />
 
     <!-- Help Panel -->
     <div v-if="showHelp" class="help-panel">
@@ -420,6 +449,9 @@ import HiringFields from './HiringFields.vue'
 import { hasHiringFields } from '../utils/hiring'
 import ImageUploader from './ImageUploader.vue'
 import EntityCard from './EntityCard.vue'
+import ContractFields from './ContractFields.vue'
+import ContractPanel from './ContractPanel.vue'
+import { contractSummary, findClubOfPlayer, parseData as parseContractData } from '../utils/contracts'
 
 const props = defineProps({
   entity: Object,
@@ -445,6 +477,72 @@ const form = reactive({
 const newTag = ref('')
 const selectedTemplate = ref(null)
 const showHelp = ref(false)
+const showContract = ref(false)
+
+// Help and contract share the right-hand slot
+watch(showHelp, on => { if (on) showContract.value = false })
+function toggleContract() {
+  showContract.value = !showContract.value
+  if (showContract.value) showHelp.value = false
+}
+
+// Player ↔ contract link, read from the form so the panel follows unsaved edits
+const playerContractId = computed(() => {
+  if (form.ItemClass !== 'player') return ''
+  try { return String(JSON.parse(form.CustomData || '{}')?.contract_id || '') } catch { return '' }
+})
+const playerContract = computed(() =>
+  state.entities.find(e => e.ItemId === playerContractId.value && e.ItemClass === 'contract') || null
+)
+const playerClub = computed(() =>
+  props.entity && !props.isNew ? findClubOfPlayer(props.entity.ItemId, state.entities) : null
+)
+const playerContractLabel = computed(() => {
+  if (playerContract.value) return `Контракт ${contractSummary(playerContract.value)}`
+  if (playerContractId.value) return 'Контракт не найден'
+  return 'Нет контракта'
+})
+const playerContractTitle = computed(() =>
+  playerContract.value
+    ? `${playerContract.value.ItemId}: осталось ${parseContractData(playerContract.value).periods_left} из ${parseContractData(playerContract.value).length_periods} периодов, ставка ${parseContractData(playerContract.value).wage}`
+    : (playerClub.value ? 'Игрок в бандле клуба, но без контракта' : 'Открыть панель контракта')
+)
+
+// The panel created, linked or removed a contract: write contract_id to both the
+// form text and the stored entity, so cancelling the modal cannot leave a half-link
+function handleContractLinked(contractId) {
+  const patch = text => {
+    let data
+    try { data = JSON.parse(text || '{}') } catch { data = null }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    data.contract_id = contractId
+    return data
+  }
+  const formData = patch(form.CustomData)
+  if (formData) form.CustomData = JSON.stringify(formData, null, 2)
+  if (props.entity && !props.isNew) {
+    const stored = patch(props.entity.CustomData)
+    if (stored) updateEntity(props.entity.ItemId, { CustomData: JSON.stringify(stored) })
+  }
+}
+
+// Saving a contract keeps the player's side of the link in step: the player it names
+// gets contract_id, the player it used to name loses it
+function syncContractPlayer(contractId, newPlayerId, oldPlayerId) {
+  const setLink = (playerId, value, onlyIfPointsHere) => {
+    const player = state.entities.find(e => e.ItemId === playerId && e.ItemClass === 'player')
+    if (!player) return
+    let data
+    try { data = JSON.parse(player.CustomData || '{}') } catch { return }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return
+    if (onlyIfPointsHere && data.contract_id !== contractId) return
+    if (data.contract_id === value) return
+    data.contract_id = value
+    updateEntity(player.ItemId, { CustomData: JSON.stringify(data) })
+  }
+  if (oldPlayerId && oldPlayerId !== newPlayerId) setLink(oldPlayerId, '', true)
+  if (newPlayerId) setLink(newPlayerId, contractId, false)
+}
 
 // Rename: ItemId is the join key, so every reference is rewritten in the same pass
 const renaming = ref(false)
@@ -522,7 +620,7 @@ const linkedFeatures = computed(() => {
   if (!props.entity || props.isNew) return []
 
   const itemClass = props.entity.ItemClass
-  if (!['player', 'tactic', 'staff_pack', 'staff_pack_deck'].includes(itemClass)) return []
+  if (!['player', 'tactic', 'staff_pack', 'staff_pack_deck', 'contract'].includes(itemClass)) return []
 
   try {
     const data = JSON.parse(props.entity.CustomData || '{}')
@@ -532,6 +630,12 @@ const linkedFeatures = computed(() => {
       // Pack: the Dossier card it brings
       const dossier = state.entities.find(e => e.ItemId === data.dossier)
       if (dossier) features.push({ position: 'ДОСЬЕ', entity: dossier })
+    } else if (itemClass === 'contract') {
+      // Contract: the player it is written for and the club that pays it
+      const player = state.entities.find(e => e.ItemId === data.player_id)
+      if (player) features.push({ position: 'ИГРОК', entity: player })
+      const club = state.entities.find(e => e.ItemId === data.club_id)
+      if (club) features.push({ position: 'КЛУБ', entity: club })
     } else if (itemClass === 'staff_pack_deck') {
       // Deck: its packs with copy counts
       for (const entry of Array.isArray(data.packs) ? data.packs : []) {
@@ -644,6 +748,8 @@ const assignmentTypeLabels = {
   feature_ref: 'Feature of',
   slot_ref: 'Slot in',
   debuff_ref: 'Debuff of',
+  contract_ref: 'Contract',
+  contract_holder: 'Player',
   mark_ref: 'Mark in',
   tactic_ref: 'Tactic of'
 }
@@ -831,6 +937,11 @@ function handleSave() {
     })
   }
 
+  if (form.ItemClass === 'contract') {
+    const oldPlayerId = props.isNew ? '' : parseContractData(props.entity).player_id
+    syncContractPlayer(form.ItemId, customDataObj.player_id || '', oldPlayerId || '')
+  }
+
   emit('save')
   emit('close')
 }
@@ -996,6 +1107,44 @@ function handleDuplicate() {
   overflow-x: auto;
   margin: 8px 0;
   line-height: 1.4;
+}
+
+/* Contract button in the header (players) */
+.btn-contract {
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 6px 10px;
+  border: 1px solid #99f6e4;
+  border-radius: 6px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-contract:hover {
+  background: #ccfbf1;
+}
+
+.btn-contract.active {
+  background: #0d9488;
+  border-color: #0d9488;
+  color: white;
+}
+
+.btn-contract.missing:not(.active) {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.label-hint {
+  font-weight: normal;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-left: 6px;
 }
 
 /* Help button */

@@ -36,6 +36,9 @@
         <span v-if="displayInfo.position" class="stat position">
           {{ displayInfo.position }}
         </span>
+        <span v-if="contractBadge" class="stat contract" :class="{ missing: contractBadge.missing }" :title="contractBadge.title">
+          📝 {{ contractBadge.text }}
+        </span>
       </div>
       <!-- Player tags -->
       <div class="player-tags" v-if="displayInfo.playerTags">
@@ -106,6 +109,8 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { getTypeIcon, getTypeColor, getEntityDisplayInfo, parseCustomData } from '../utils/entityHelpers'
 import { useImageManager } from '../composables/useImageManager'
 import { useValidation } from '../composables/useValidation'
+import { usePlayFabData } from '../composables/usePlayFabData'
+import { contractSummary, findClubOfPlayer, parseData as parseContractData } from '../utils/contracts'
 
 const props = defineProps({
   entity: {
@@ -118,6 +123,29 @@ defineEmits(['edit'])
 
 const { getImagePreview, generateImagePath } = useImageManager()
 const { hasErrors, hasWarnings, getIssues } = useValidation()
+const { state } = usePlayFabData()
+
+// Player contract: "13п · $2" for club players, a red "нет" for a bundled player without one
+const contractBadge = computed(() => {
+  if (props.entity.ItemClass !== 'player') return null
+  const contractId = parseContractData(props.entity).contract_id
+  const contract = contractId
+    ? state.entities.find(e => e.ItemId === contractId && e.ItemClass === 'contract')
+    : null
+  if (contract) {
+    const d = parseContractData(contract)
+    return {
+      text: contractSummary(contract),
+      title: `${contract.ItemId}: осталось ${d.periods_left} из ${d.length_periods} периодов, ставка ${d.wage}`,
+      missing: false
+    }
+  }
+  if (contractId) return { text: 'не найден', title: `contract_id = ${contractId}`, missing: true }
+  if (findClubOfPlayer(props.entity.ItemId, state.entities)) {
+    return { text: 'нет', title: 'Игрок в бандле клуба, но без контракта', missing: true }
+  }
+  return null
+})
 
 const imageUrl = ref(null)
 
@@ -131,7 +159,7 @@ function formatStyle(style) {
 }
 const hasStats = computed(() => {
   const info = displayInfo.value
-  return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null
+  return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null || !!contractBadge.value
 })
 
 const showsDescription = computed(() =>
@@ -335,6 +363,16 @@ onUnmounted(() => {
   background: #dbeafe;
   color: #1d4ed8;
   font-weight: 600;
+}
+
+.stat.contract {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.stat.contract.missing {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 /* Tactic slots */

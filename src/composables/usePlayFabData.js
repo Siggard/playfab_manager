@@ -74,9 +74,21 @@ function replaceIdDeep(value, oldId, newId) {
 }
 
 // Turn a CustomData path into the label shown in "Assigned To"
+function parseCustomDataObject(text) {
+  if (!text) return null
+  try {
+    const data = JSON.parse(text)
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : null
+  } catch {
+    return null
+  }
+}
+
 function assignmentTypeForPath(path) {
   if (path === 'Bundle.BundledItems') return 'bundle'
   if (path.includes('debuff_ids')) return 'debuff_ref'
+  if (path.endsWith('.contract_id')) return 'contract_holder'
+  if (path.endsWith('.player_id')) return 'contract_ref'
   if (path.includes('infrastructure')) return 'infra_ref'
   if (path.includes('team_roster')) return 'roster_ref'
   if (path.includes('.slots[') && path.includes('feature_ids')) return 'slot_ref'
@@ -120,6 +132,20 @@ export function usePlayFabData() {
     if (bundle && !bundle.Bundle.BundledItems.includes(entityId)) {
       bundle.Bundle.BundledItems.push(entityId)
     }
+
+    // A player moved into a club takes their contract along: club_id follows the bundle
+    if (bundle?.ItemClass === 'club') {
+      const player = state.entities.find(e => e.ItemId === entityId && e.ItemClass === 'player')
+      const contractId = parseCustomDataObject(player?.CustomData)?.contract_id
+      const contract = contractId
+        ? state.entities.find(e => e.ItemId === contractId && e.ItemClass === 'contract')
+        : null
+      const data = parseCustomDataObject(contract?.CustomData)
+      if (data && data.club_id !== bundleId) {
+        data.club_id = bundleId
+        contract.CustomData = JSON.stringify(data)
+      }
+    }
   }
 
   function removeEntityFromBundle(entityId, bundleId) {
@@ -144,6 +170,26 @@ export function usePlayFabData() {
   }
 
   function deleteEntity(itemId) {
+    const target = state.entities.find(e => e.ItemId === itemId)
+
+    // Contracts live and die with their player: a deleted contract leaves the player
+    // without contract_id, a deleted player takes its contracts along
+    if (target?.ItemClass === 'contract') {
+      state.entities.forEach(e => {
+        if (e.ItemClass !== 'player') return
+        const data = parseCustomDataObject(e.CustomData)
+        if (data?.contract_id === itemId) {
+          data.contract_id = ''
+          e.CustomData = JSON.stringify(data)
+        }
+      })
+    } else if (target?.ItemClass === 'player') {
+      state.entities
+        .filter(e => e.ItemClass === 'contract' && parseCustomDataObject(e.CustomData)?.player_id === itemId)
+        .map(e => e.ItemId)
+        .forEach(id => deleteEntity(id))
+    }
+
     // Remove from all bundles first
     state.bundles.forEach(bundle => {
       if (bundle.Bundle.BundledItems.includes(itemId)) {
@@ -217,7 +263,8 @@ export function usePlayFabData() {
       personal_connection: 'personal_connection_',
       staff_pack: 'staff_pack_',
       dossier: 'dossier_',
-      staff_pack_deck: 'staff_pack_deck_'
+      staff_pack_deck: 'staff_pack_deck_',
+      contract: 'contract_'
     }
 
     const prefix = prefixes[itemClass] || `${itemClass}_`

@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { usePlayFabData } from './usePlayFabData'
 import { hiringIssuesForEntity } from '../utils/hiring'
+import { contractIssuesForEntity } from '../utils/contracts'
 
 // Hiring board classes report several problems at once; one rule per severity
 function hiringRule(severity) {
@@ -10,6 +11,21 @@ function hiringRule(severity) {
     message: 'Hiring board data',
     check: (item, allItems) => {
       const messages = hiringIssuesForEntity(item, allItems)
+        .filter(i => i.severity === severity)
+        .map(i => i.message)
+      return messages.length > 0 ? { message: messages.join('; ') } : null
+    }
+  }
+}
+
+// Player contracts: the game refuses a catalog with broken links, so every problem is listed
+function contractRule(severity) {
+  return {
+    id: `contract_${severity}`,
+    severity,
+    message: 'Player contract',
+    check: (item, allItems) => {
+      const messages = contractIssuesForEntity(item, allItems)
         .filter(i => i.severity === severity)
         .map(i => i.message)
       return messages.length > 0 ? { message: messages.join('; ') } : null
@@ -150,7 +166,9 @@ const validationRules = [
     }
   },
   hiringRule('error'),
-  hiringRule('warning')
+  hiringRule('warning'),
+  contractRule('error'),
+  contractRule('warning')
 ]
 
 export function useValidation() {
