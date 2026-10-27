@@ -235,6 +235,7 @@
           :type="group.type"
           :items="group.items"
           :recommendations="group.recommendations"
+          :packs="group.packs || {}"
           :bundle-id="bundleId"
           @remove-item="removeFromBundle"
           @add-item="addToBundle"
@@ -620,8 +621,8 @@ const itemGroups = computed(() => {
   // Club: «Личные связи» are the Dossier cards its starting packs bring
   // (CustomData.staff_packs), not cards of the bundle itself
   if (isClub.value) {
-    const dossiers = startingPacks.value.map(e => e.dossier || e.pack).filter(Boolean)
-    if (dossiers.length > 0) {
+    const entries = startingPacks.value.filter(e => e.dossier || e.pack)
+    if (entries.length > 0) {
       if (!groups.personal_connection) {
         groups.personal_connection = {
           type: 'personal_connection',
@@ -629,7 +630,12 @@ const itemGroups = computed(() => {
           recommendations: getRecommendations(bundleType, 'personal_connection')
         }
       }
-      groups.personal_connection.items.push(...dossiers)
+      groups.personal_connection.packs = {}
+      for (const e of entries) {
+        const card = e.dossier || e.pack
+        groups.personal_connection.items.push(card)
+        if (e.dossier && e.pack) groups.personal_connection.packs[card.ItemId] = e.pack
+      }
     }
   }
 

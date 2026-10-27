@@ -35,18 +35,32 @@
         @dragleave="dragOver = false"
         :class="{ 'drag-over': dragOver, 'type-location': type === 'location', 'type-tactic': type === 'tactic', 'type-connection': type === 'personal_connection' }"
       >
-        <!-- Regular items -->
+        <!-- Regular items; a Dossier that came with a staff pack sits inside the pack's frame -->
         <div
           v-for="item in items"
           :key="item.ItemId"
           class="item-wrapper"
+          :class="{ 'pack-frame': packs[item.ItemId] }"
           @dblclick="$emit('edit-item', item)"
         >
+          <div
+            v-if="packs[item.ItemId]"
+            class="pack-head"
+            title="Пак персонала, с которым пришла связь — открыть"
+            @click.stop="$emit('edit-item', packs[item.ItemId])"
+            @dblclick.stop="$emit('edit-item', packs[item.ItemId])"
+          >
+            <span class="pack-title">🧳 {{ packs[item.ItemId].DisplayName || packs[item.ItemId].ItemId }}</span>
+            <span class="pack-id">{{ packs[item.ItemId].ItemId }}</span>
+          </div>
           <EntityCard :entity="item" />
+          <div v-if="packs[item.ItemId]" class="pack-foot">
+            <span v-for="(line, i) in packLines(packs[item.ItemId], item)" :key="i" class="pack-line">{{ line }}</span>
+          </div>
           <button
             @click.stop="$emit('remove-item', item.ItemId)"
             class="btn-remove-overlay"
-            title="Remove from bundle"
+            :title="packs[item.ItemId] ? 'Убрать пак у клуба' : 'Remove from bundle'"
           >
             x
           </button>
@@ -66,13 +80,41 @@
 <script setup>
 import { ref, computed } from 'vue'
 import EntityCard from './EntityCard.vue'
+import { parseCustomData } from '../utils/entityHelpers'
+import { STAFF_TYPE_LABELS } from '../utils/hiring'
 
 const props = defineProps({
   type: String,
   items: Array,
   recommendations: Object,
-  bundleId: String
+  bundleId: String,
+  // personal connections of a club: { dossierId: staff_pack entity } for Dossiers
+  // that came with a starting pack
+  packs: { type: Object, default: () => ({}) }
 })
+
+function staffWords(staff) {
+  return Object.entries(staff || {})
+    .filter(([, n]) => Number(n) > 0)
+    .map(([role, n]) => `${(STAFF_TYPE_LABELS[role] || role).toLowerCase()} ${n}`)
+    .join(', ')
+}
+
+// What the pack brought and what happens when its Dossier leaves
+function packLines(pack, dossier) {
+  const p = parseCustomData(pack?.CustomData) || {}
+  const d = parseCustomData(dossier?.CustomData) || {}
+  const lines = []
+  const brought = staffWords(p.staff)
+  lines.push(brought ? `принёс фишки: ${brought}` : 'без фишек — чистое Досье')
+  if (d.contract_weeks) lines.push(`контракт ${d.contract_weeks} нед.`)
+  const leave = []
+  if (d.on_leave?.reputation) leave.push(`репутация ${d.on_leave.reputation > 0 ? '+' : ''}${d.on_leave.reputation}`)
+  const leaveStaff = staffWords(d.on_leave?.staff)
+  if (leaveStaff) leave.push(`уходят фишки: ${leaveStaff}`)
+  if (leave.length) lines.push(`при уходе: ${leave.join('; ')}`)
+  return lines
+}
 
 const emit = defineEmits(['remove-item', 'add-item', 'quick-add', 'edit-item'])
 
@@ -285,6 +327,45 @@ function handleDrop(event) {
 
 .item-wrapper {
   position: relative;
+}
+
+/* A Dossier framed by the staff pack it came with */
+.item-wrapper.pack-frame {
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  background: #f0f9ff;
+  padding: 0 6px 6px;
+}
+
+.pack-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 2px 6px;
+  cursor: pointer;
+  color: #0c4a6e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pack-head:hover .pack-title {
+  text-decoration: underline;
+}
+
+.pack-id {
+  font-family: monospace;
+  font-weight: normal;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.pack-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 2px 0;
+  font-size: 11px;
+  color: #475569;
 }
 
 .item-wrapper:deep(.entity-card) {
