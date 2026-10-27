@@ -189,6 +189,7 @@ function remove() {
 .contract-panel {
   background: #f8fafc;
   width: 480px;
+  flex: 0 0 480px;
   max-height: 90vh;
   border-radius: 0 12px 12px 0;
   display: flex;

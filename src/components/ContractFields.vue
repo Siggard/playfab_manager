@@ -108,7 +108,7 @@
           :value="data.periods_left ?? ''"
           @change="setInt('periods_left', $event.target.value)"
         />
-        <span class="cf-note">выплат из {{ data.length_periods ?? '?' }} на старте партии; меньше срока — только для «уже отработанного» контракта</span>
+        <span class="cf-note" title="Стартовый остаток: дальше игра ведёт его сама. Меньше срока — только для «уже отработанного» контракта">выплат из {{ data.length_periods ?? '?' }} на старте</span>
       </div>
 
       <span class="cf-label">Подписан</span>

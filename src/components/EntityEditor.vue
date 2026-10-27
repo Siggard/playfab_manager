@@ -18,6 +18,8 @@
         </div>
 
       <div class="modal-body">
+       <div class="modal-columns">
+       <div class="modal-col modal-col-meta">
         <!-- Template Selector (only for new entities) -->
         <div v-if="isNew && availableTemplates.length > 0" class="form-group template-selector">
           <label>Use Template</label>
@@ -182,78 +184,6 @@
           ></textarea>
         </div>
 
-        <!-- Structured fields for the hiring board classes; edits the JSON below -->
-        <HiringFields
-          v-if="hasHiringFields(form.ItemClass)"
-          v-model="form.CustomData"
-          :item-class="form.ItemClass"
-          :item-id="form.ItemId"
-        />
-
-        <!-- Structured fields for a contract; edits the JSON below -->
-        <div v-if="form.ItemClass === 'contract'" class="form-group">
-          <label>
-            Контракт
-            <span class="label-hint">поля меняют Custom Data ниже</span>
-          </label>
-          <ContractFields v-model="form.CustomData" :item-id="form.ItemId" />
-        </div>
-
-        <div class="form-group">
-          <label>
-            Custom Data (JSON)
-            <button type="button" class="btn-help" @click="showHelp = !showHelp" title="Show format reference">?</button>
-          </label>
-          <textarea
-            v-model="form.CustomData"
-            placeholder='{"power": "5", "level": "3"}'
-            rows="12"
-            :class="{ error: customDataError }"
-            class="code"
-          ></textarea>
-          <span v-if="customDataError" class="error-text">{{ customDataError }}</span>
-          <div class="json-buttons">
-            <button type="button" @click="formatCustomData" class="btn-format">
-              Format JSON
-            </button>
-            <button type="button" @click="fixNestedJson" class="btn-format btn-fix">
-              Fix Nested JSON
-            </button>
-          </div>
-        </div>
-
-        <!-- Linked Features (players, tactics) / Dossier (staff packs) / packs (staff pack decks) -->
-        <div v-if="linkedFeatures.length > 0" class="form-group linked-features">
-          <label>{{ linkedTitle }}</label>
-          <div class="features-list">
-            <div
-              v-for="link in linkedFeatures"
-              :key="link.entity.ItemId"
-              class="feature-item"
-              @click="openLinkedFeature(link.entity)"
-            >
-              <span class="feature-position">{{ link.position }}</span>
-              <EntityCard :entity="link.entity" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Linked Debuffs (for players) -->
-        <div v-if="linkedDebuffs.length > 0" class="form-group linked-debuffs">
-          <label>Linked Debuffs</label>
-          <div class="features-list">
-            <div
-              v-for="link in linkedDebuffs"
-              :key="link.entity.ItemId"
-              class="feature-item"
-              @click="openLinkedFeature(link.entity)"
-            >
-              <span class="feature-position debuff">{{ link.position }}</span>
-              <EntityCard :entity="link.entity" />
-            </div>
-          </div>
-        </div>
-
         <!-- Image Upload -->
         <div class="form-group">
           <label>Image</label>
@@ -284,6 +214,83 @@
             />
           </div>
         </div>
+       </div>
+
+       <div class="modal-col modal-col-data">
+        <!-- Structured fields for the hiring board classes; edits the JSON below -->
+        <HiringFields
+          v-if="hasHiringFields(form.ItemClass)"
+          v-model="form.CustomData"
+          :item-class="form.ItemClass"
+          :item-id="form.ItemId"
+        />
+
+        <!-- Structured fields for a contract; edits the JSON below -->
+        <div v-if="form.ItemClass === 'contract'" class="form-group">
+          <label>
+            Контракт
+            <span class="label-hint">поля меняют Custom Data ниже</span>
+          </label>
+          <ContractFields v-model="form.CustomData" :item-id="form.ItemId" />
+        </div>
+
+        <div class="form-group">
+          <label>
+            Custom Data (JSON)
+            <button type="button" class="btn-help" @click="showHelp = !showHelp" title="Show format reference">?</button>
+          </label>
+          <textarea
+            v-model="form.CustomData"
+            placeholder='{"power": "5", "level": "3"}'
+            rows="22"
+            :class="{ error: customDataError }"
+            class="code"
+          ></textarea>
+          <span v-if="customDataError" class="error-text">{{ customDataError }}</span>
+          <div class="json-buttons">
+            <button type="button" @click="formatCustomData" class="btn-format">
+              Format JSON
+            </button>
+            <button type="button" @click="fixNestedJson" class="btn-format btn-fix">
+              Fix Nested JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Linked Features (players, tactics) / Dossier (staff packs) / packs (staff pack decks) -->
+        <div v-if="linkedFeatures.length > 0" class="form-group linked-features">
+          <label>{{ linkedTitle }}</label>
+          <div class="features-list">
+            <div
+              v-for="link in linkedFeatures"
+              :key="link.entity.ItemId"
+              class="feature-item"
+              @click="openLinkedFeature(link.entity)"
+            >
+              <span class="feature-position" :class="link.cls" :title="link.title">{{ link.position }}</span>
+              <EntityCard :entity="link.entity" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Linked Debuffs (for players) -->
+        <div v-if="linkedDebuffs.length > 0" class="form-group linked-debuffs">
+          <label>Linked Debuffs</label>
+          <div class="features-list">
+            <div
+              v-for="link in linkedDebuffs"
+              :key="link.entity.ItemId"
+              class="feature-item"
+              @click="openLinkedFeature(link.entity)"
+            >
+              <span class="feature-position debuff">{{ link.position }}</span>
+              <EntityCard :entity="link.entity" />
+            </div>
+          </div>
+        </div>
+
+       </div>
+       </div>
       </div>
 
       <div class="modal-footer">
@@ -671,6 +678,34 @@ const linkedFeatures = computed(() => {
         })
       }
 
+      // Tactic: native features by level — the card's design, separate from what is
+      // learned now. Levels up to the card's level should match feature_ids.
+      if (data.native_features && typeof data.native_features === 'object' && !Array.isArray(data.native_features)) {
+        const cardLevel = parseInt(data.level, 10) || 0
+        const learned = Array.isArray(data.feature_ids) ? data.feature_ids : []
+        const levels = Object.keys(data.native_features)
+          .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
+        for (const level of levels) {
+          const ids = data.native_features[level]
+          if (!Array.isArray(ids)) continue
+          const num = parseInt(level, 10) || 0
+          for (const featureId of ids) {
+            const featureEntity = state.entities.find(e => e.ItemId === featureId)
+            if (!featureEntity) continue
+            const open = num <= cardLevel
+            const missing = open && !learned.includes(featureId)
+            features.push({
+              position: `РОДНОЕ ур.${level}`,
+              cls: missing ? 'native-mismatch' : (open ? 'native-learned' : 'native-locked'),
+              title: missing
+                ? `Уровень ${level} ≤ уровня карты (${cardLevel}), но свойства нет в feature_ids`
+                : (open ? 'Выучено — входит в feature_ids' : `Откроется на уровне ${level}`),
+              entity: featureEntity
+            })
+          }
+        }
+      }
+
       // Tactic: slot features in slots[index].feature_ids[]
       if (Array.isArray(data.slots)) {
         data.slots.forEach((slot, slotIndex) => {
@@ -999,23 +1034,41 @@ function handleDuplicate() {
 .modal-container {
   display: flex;
   gap: 0;
-  max-width: 500px;
-  transition: max-width 0.2s ease;
+  width: min(1000px, 96vw);
+  transition: width 0.2s ease;
 }
 
 .modal-container.with-help {
-  max-width: 950px;
+  width: min(1480px, 96vw);
 }
 
 .modal-content {
   background: white;
   border-radius: 12px;
-  width: 100%;
-  max-width: 500px;
+  flex: 1 1 auto;
+  min-width: 0;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+/* Two columns: identity and meta on the left, data and links on the right */
+.modal-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 0 28px;
+  align-items: start;
+}
+
+.modal-col {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .modal-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .modal-container.with-help .modal-content {
@@ -1027,6 +1080,7 @@ function handleDuplicate() {
 .help-panel {
   background: #f8fafc;
   width: 450px;
+  flex: 0 0 450px;
   max-height: 90vh;
   border-radius: 0 12px 12px 0;
   display: flex;
@@ -1695,6 +1749,21 @@ function handleDuplicate() {
 .feature-position.debuff {
   color: #dc2626;
   background: #fee2e2;
+}
+
+.feature-position.native-learned {
+  color: #15803d;
+  background: #dcfce7;
+}
+
+.feature-position.native-locked {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.feature-position.native-mismatch {
+  color: #b45309;
+  background: #fef3c7;
 }
 
 .linked-debuffs label {
