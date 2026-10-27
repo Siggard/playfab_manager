@@ -94,6 +94,37 @@
         <span class="staff-total">total {{ staffTotal }}</span>
       </div>
 
+      <!-- Starting staff packs: personal packs the club gets with the session
+           (CustomData.staff_packs), not cards of the bundle and not deck packs -->
+      <div class="sub-row">
+        <span class="sub-label">PACKS</span>
+        <div class="pack-chips">
+          <span
+            v-for="entry in startingPacks"
+            :key="entry.id"
+            class="pack-chip"
+            :class="{ 'is-broken': !entry.pack }"
+            :title="entry.title"
+          >
+            <span class="module-link" @click.stop="entry.pack && $emit('edit-item', entry.pack)">
+              🧳 {{ entry.label }}
+            </span>
+            <span v-if="entry.dossier" class="pack-dossier" @click.stop="$emit('edit-item', entry.dossier)">
+              📁 {{ entry.dossier.DisplayName || entry.dossier.ItemId }}
+            </span>
+            <span v-if="entry.tokens" class="pack-tokens">{{ entry.tokens }}</span>
+            <button class="pack-remove" title="Убрать пак у клуба" @click.stop="removeStartingPack(entry.id)">×</button>
+          </span>
+          <select class="pack-add" :value="''" @change="addStartingPack($event.target.value)">
+            <option value="">+ пак…</option>
+            <option v-for="p in availablePacks" :key="p.ItemId" :value="p.ItemId">
+              {{ p.DisplayName || p.ItemId }} — {{ p.ItemId }}
+            </option>
+          </select>
+          <span v-if="startingPacks.length === 0" class="pack-empty">нет личных паков</span>
+        </div>
+      </div>
+
       <!-- Reputation: a token on a -10…+10 scale, no zero position -->
       <div class="sub-row">
         <span class="sub-label">REP</span>
@@ -326,7 +357,8 @@ import {
   DEFAULT_STAFF_ROLES,
   REPUTATION_MAX,
   REPUTATION_FACES,
-  getReputation
+  getReputation,
+  parseCustomData
 } from '../utils/entityHelpers'
 
 const props = defineProps({
@@ -418,6 +450,63 @@ const staffCounts = computed(() => {
 const staffTotal = computed(() =>
   Object.values(staffCounts.value).reduce((sum, n) => sum + n, 0)
 )
+
+// Starting packs: CustomData.staff_packs — ids of staff_pack entities
+const startingPacks = computed(() => {
+  const ids = bundleData.value.staff_packs
+  if (!Array.isArray(ids)) return []
+  return ids.map(id => {
+    const pack = state.entities.find(e => e.ItemId === id && e.ItemClass === 'staff_pack')
+    const packData = parseCustomData(pack?.CustomData) || {}
+    const dossier = packData.dossier
+      ? state.entities.find(e => e.ItemId === packData.dossier && e.ItemClass === 'dossier')
+      : null
+    const tokens = Object.entries(packData.staff || {})
+      .filter(([, n]) => n > 0)
+      .map(([role, n]) => `${role} ${n}`)
+      .join(', ')
+    return {
+      id,
+      pack,
+      dossier,
+      tokens,
+      label: pack ? `${pack.DisplayName || pack.ItemId}` : `${id} (не найден)`,
+      title: pack ? `${id}: личный пак клуба, выдаётся с партии` : `Пак ${id} отсутствует в каталоге`
+    }
+  })
+})
+
+// Packs that can still be added: not already here and not handed out by a deck
+const availablePacks = computed(() => {
+  const present = new Set(startingPacks.value.map(e => e.id))
+  const inDeck = new Set()
+  state.entities
+    .filter(e => e.ItemClass === 'staff_pack_deck')
+    .forEach(deck => {
+      const packs = parseCustomData(deck.CustomData)?.packs
+      if (Array.isArray(packs)) packs.forEach(entry => entry?.pack && inDeck.add(entry.pack))
+    })
+  return state.entities
+    .filter(e => e.ItemClass === 'staff_pack' && !present.has(e.ItemId) && !inDeck.has(e.ItemId))
+    .sort((a, b) => a.ItemId.localeCompare(b.ItemId, undefined, { numeric: true }))
+})
+
+function writeStartingPacks(ids) {
+  if (!bundle.value) return
+  const data = { ...bundleData.value }
+  if (ids.length > 0) data.staff_packs = ids
+  else delete data.staff_packs
+  updateEntity(props.bundleId, { CustomData: JSON.stringify(data) })
+}
+
+function addStartingPack(id) {
+  if (!id) return
+  writeStartingPacks([...startingPacks.value.map(e => e.id), id])
+}
+
+function removeStartingPack(id) {
+  writeStartingPacks(startingPacks.value.map(e => e.id).filter(x => x !== id))
+}
 
 function writeStaffCounts(counts) {
   if (!bundle.value) return
@@ -1188,6 +1277,74 @@ onUnmounted(() => {
 
 .staff-total {
   margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Starting staff packs */
+.pack-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pack-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #0c4a6e;
+}
+
+.pack-chip.is-broken {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.pack-dossier {
+  color: #a16207;
+  cursor: pointer;
+}
+
+.pack-dossier:hover {
+  text-decoration: underline;
+}
+
+.pack-tokens {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.pack-remove {
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.pack-remove:hover {
+  color: #dc2626;
+}
+
+.pack-add {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #64748b;
+}
+
+.pack-empty {
   font-size: 12px;
   color: #94a3b8;
 }
