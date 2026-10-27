@@ -273,6 +273,25 @@
           </div>
         </div>
 
+        <!-- Native features of a tactic: the card's design by level, apart from what is active -->
+        <div v-if="nativeFeatures.length > 0" class="form-group native-features">
+          <label>
+            Родные свойства
+            <span class="label-hint">{{ nativeSummary }}</span>
+          </label>
+          <div class="features-list">
+            <div
+              v-for="link in nativeFeatures"
+              :key="'native-' + link.position + link.entity.ItemId"
+              class="feature-item"
+              @click="openLinkedFeature(link.entity)"
+            >
+              <span class="feature-position" :class="link.cls" :title="link.title">{{ link.position }}</span>
+              <EntityCard :entity="link.entity" />
+            </div>
+          </div>
+        </div>
+
         <!-- Linked Debuffs (for players) -->
         <div v-if="linkedDebuffs.length > 0" class="form-group linked-debuffs">
           <label>Linked Debuffs</label>
@@ -678,34 +697,6 @@ const linkedFeatures = computed(() => {
         })
       }
 
-      // Tactic: native features by level — the card's design, separate from what is
-      // learned now. Levels up to the card's level should match feature_ids.
-      if (data.native_features && typeof data.native_features === 'object' && !Array.isArray(data.native_features)) {
-        const cardLevel = parseInt(data.level, 10) || 0
-        const learned = Array.isArray(data.feature_ids) ? data.feature_ids : []
-        const levels = Object.keys(data.native_features)
-          .sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
-        for (const level of levels) {
-          const ids = data.native_features[level]
-          if (!Array.isArray(ids)) continue
-          const num = parseInt(level, 10) || 0
-          for (const featureId of ids) {
-            const featureEntity = state.entities.find(e => e.ItemId === featureId)
-            if (!featureEntity) continue
-            const open = num <= cardLevel
-            const missing = open && !learned.includes(featureId)
-            features.push({
-              position: `РОДНОЕ ур.${level}`,
-              cls: missing ? 'native-mismatch' : (open ? 'native-learned' : 'native-locked'),
-              title: missing
-                ? `Уровень ${level} ≤ уровня карты (${cardLevel}), но свойства нет в feature_ids`
-                : (open ? 'Выучено — входит в feature_ids' : `Откроется на уровне ${level}`),
-              entity: featureEntity
-            })
-          }
-        }
-      }
-
       // Tactic: slot features in slots[index].feature_ids[]
       if (Array.isArray(data.slots)) {
         data.slots.forEach((slot, slotIndex) => {
@@ -730,6 +721,52 @@ const linkedFeatures = computed(() => {
   } catch {
     return []
   }
+})
+
+// Tactic: native features by level — the card's design (what it is predisposed to),
+// separate from feature_ids (what is active now). Normally the learned levels match.
+const nativeFeatures = computed(() => {
+  if (!props.entity || props.isNew || props.entity.ItemClass !== 'tactic') return []
+  try {
+    const data = JSON.parse(props.entity.CustomData || '{}')
+    const native = data.native_features
+    if (!native || typeof native !== 'object' || Array.isArray(native)) return []
+    const cardLevel = parseInt(data.level, 10) || 0
+    const learned = Array.isArray(data.feature_ids) ? data.feature_ids : []
+    const out = []
+    const levels = Object.keys(native).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0))
+    for (const level of levels) {
+      const ids = native[level]
+      if (!Array.isArray(ids)) continue
+      const num = parseInt(level, 10) || 0
+      for (const featureId of ids) {
+        const featureEntity = state.entities.find(e => e.ItemId === featureId)
+        if (!featureEntity) continue
+        const open = num <= cardLevel
+        const missing = open && !learned.includes(featureId)
+        out.push({
+          position: `УР. ${level}`,
+          cls: missing ? 'native-mismatch' : (open ? 'native-learned' : 'native-locked'),
+          title: missing
+            ? `Уровень ${level} ≤ уровня карты (${cardLevel}), но свойства нет в feature_ids`
+            : (open ? 'Натренировано — есть в feature_ids' : `Откроется на уровне ${level}`),
+          entity: featureEntity
+        })
+      }
+    }
+    return out
+  } catch {
+    return []
+  }
+})
+
+const nativeSummary = computed(() => {
+  const learned = nativeFeatures.value.filter(f => f.cls === 'native-learned').length
+  const locked = nativeFeatures.value.filter(f => f.cls === 'native-locked').length
+  const missing = nativeFeatures.value.filter(f => f.cls === 'native-mismatch').length
+  const parts = [`${learned} натренировано`, `${locked} впереди`]
+  if (missing) parts.push(`${missing} не в feature_ids`)
+  return parts.join(', ')
 })
 
 const linkedTitle = computed(() => ({
@@ -1749,6 +1786,10 @@ function handleDuplicate() {
 .feature-position.debuff {
   color: #dc2626;
   background: #fee2e2;
+}
+
+.native-features label {
+  color: #15803d;
 }
 
 .feature-position.native-learned {
