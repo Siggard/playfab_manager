@@ -149,9 +149,44 @@ export function hiringIssues(itemClass, data, allItems) {
   return issues
 }
 
+// A club's starting packs (CustomData.staff_packs) are personal: each must be a
+// staff_pack that no hiring-board deck hands out — the game refuses the catalog otherwise
+export function clubStaffPackIssues(data, allItems) {
+  const packs = data?.staff_packs
+  if (packs === undefined || packs === null) return []
+  if (!Array.isArray(packs)) {
+    return [{ severity: 'error', message: 'staff_packs: должен быть массивом id паков' }]
+  }
+  const issues = []
+  const byId = new Map(allItems.map(i => [i.ItemId, i]))
+  const decks = allItems.filter(i => i.ItemClass === 'staff_pack_deck')
+  packs.forEach((packId, i) => {
+    const where = `staff_packs[${i}]`
+    const pack = byId.get(packId)
+    if (!pack) {
+      issues.push({ severity: 'error', message: `${where}: пак «${packId}» не найден` })
+      return
+    }
+    if (pack.ItemClass !== 'staff_pack') {
+      issues.push({ severity: 'error', message: `${where}: «${packId}» — не пак, а ${pack.ItemClass}` })
+      return
+    }
+    const deck = decks.find(d => getDeckEntries(d).some(e => e?.pack === packId))
+    if (deck) {
+      issues.push({
+        severity: 'error',
+        message: `${where}: пак «${packId}» лежит в колоде ${deck.ItemId} — стартовый пак клуба не может быть в колоде планшета`
+      })
+    }
+  })
+  return issues
+}
+
 export function hiringIssuesForEntity(entity, allItems) {
   const data = parse(entity)
-  return data ? hiringIssues(entity.ItemClass, data, allItems) : []
+  if (!data) return []
+  if (entity.ItemClass === 'club') return clubStaffPackIssues(data, allItems)
+  return hiringIssues(entity.ItemClass, data, allItems)
 }
 
 // staff_pack_deck keeps its contents in CustomData.packs: [{ pack, count }]
