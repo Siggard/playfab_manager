@@ -94,37 +94,6 @@
         <span class="staff-total">total {{ staffTotal }}</span>
       </div>
 
-      <!-- Starting staff packs: personal packs the club gets with the session
-           (CustomData.staff_packs), not cards of the bundle and not deck packs -->
-      <div class="sub-row">
-        <span class="sub-label">PACKS</span>
-        <div class="pack-chips">
-          <span
-            v-for="entry in startingPacks"
-            :key="entry.id"
-            class="pack-chip"
-            :class="{ 'is-broken': !entry.pack }"
-            :title="entry.title"
-          >
-            <span class="module-link" @click.stop="entry.pack && $emit('edit-item', entry.pack)">
-              🧳 {{ entry.label }}
-            </span>
-            <span v-if="entry.dossier" class="pack-dossier" @click.stop="$emit('edit-item', entry.dossier)">
-              📁 {{ entry.dossier.DisplayName || entry.dossier.ItemId }}
-            </span>
-            <span v-if="entry.tokens" class="pack-tokens">{{ entry.tokens }}</span>
-            <button class="pack-remove" title="Убрать пак у клуба" @click.stop="removeStartingPack(entry.id)">×</button>
-          </span>
-          <select class="pack-add" :value="''" @change="addStartingPack($event.target.value)">
-            <option value="">+ пак…</option>
-            <option v-for="p in availablePacks" :key="p.ItemId" :value="p.ItemId">
-              {{ p.DisplayName || p.ItemId }} — {{ p.ItemId }}
-            </option>
-          </select>
-          <span v-if="startingPacks.length === 0" class="pack-empty">нет личных паков</span>
-        </div>
-      </div>
-
       <!-- Reputation: a token on a -10…+10 scale, no zero position -->
       <div class="sub-row">
         <span class="sub-label">REP</span>
@@ -500,7 +469,7 @@ function writeStartingPacks(ids) {
 }
 
 function addStartingPack(id) {
-  if (!id) return
+  if (!id || startingPacks.value.some(e => e.id === id)) return
   writeStartingPacks([...startingPacks.value.map(e => e.id), id])
 }
 
@@ -647,6 +616,22 @@ const itemGroups = computed(() => {
     }
     groups[type].items.push(item)
   })
+
+  // Club: «Личные связи» are the Dossier cards its starting packs bring
+  // (CustomData.staff_packs), not cards of the bundle itself
+  if (isClub.value) {
+    const dossiers = startingPacks.value.map(e => e.dossier || e.pack).filter(Boolean)
+    if (dossiers.length > 0) {
+      if (!groups.personal_connection) {
+        groups.personal_connection = {
+          type: 'personal_connection',
+          items: [],
+          recommendations: getRecommendations(bundleType, 'personal_connection')
+        }
+      }
+      groups.personal_connection.items.push(...dossiers)
+    }
+  }
 
   // Add empty groups for recommended types
   const defaultTypes = isClub.value
@@ -809,10 +794,12 @@ const progressPercent = computed(() => {
 const quickAddItems = computed(() => {
   if (!quickAddType.value) return []
 
-  let items = nonBundleEntities.value.filter(e =>
-    e.ItemClass === quickAddType.value &&
-    !bundleItemIds.value.includes(e.ItemId)
-  )
+  let items = isClub.value && quickAddType.value === 'personal_connection'
+    ? availablePacks.value
+    : nonBundleEntities.value.filter(e =>
+        e.ItemClass === quickAddType.value &&
+        !bundleItemIds.value.includes(e.ItemId)
+      )
 
   // Filter by unassigned only
   if (quickAddOnlyUnassigned.value) {
@@ -906,10 +893,28 @@ function handleDragStart(event, entity) {
   event.dataTransfer.effectAllowed = 'move'
 }
 
+// The pack that brings this Dossier (a Dossier is listed on the club through its pack)
+function packForDossier(dossierId) {
+  return state.entities.find(e =>
+    e.ItemClass === 'staff_pack' && parseCustomData(e.CustomData)?.dossier === dossierId
+  ) || null
+}
+
 function addToBundle(itemId) {
   const incoming = state.entities.find(e => e.ItemId === itemId)
 
   if (isClub.value) {
+    // Personal connections: a pack (or its Dossier) goes to CustomData.staff_packs
+    if (incoming?.ItemClass === 'staff_pack') {
+      addStartingPack(itemId)
+      return
+    }
+    if (incoming?.ItemClass === 'dossier') {
+      const pack = packForDossier(itemId)
+      if (pack) addStartingPack(pack.ItemId)
+      return
+    }
+
     // A club holds exactly one team — adding another replaces the current one
     if (incoming?.ItemClass === 'team' && teamEntity.value && teamEntity.value.ItemId !== itemId) {
       removeEntityFromBundle(teamEntity.value.ItemId, props.bundleId)
@@ -925,6 +930,14 @@ function addToBundle(itemId) {
 
 function removeFromBundle(itemId) {
   const outgoing = state.entities.find(e => e.ItemId === itemId)
+
+  if (isClub.value && (outgoing?.ItemClass === 'staff_pack' || outgoing?.ItemClass === 'dossier')) {
+    const entry = startingPacks.value.find(e =>
+      e.id === itemId || e.dossier?.ItemId === itemId
+    )
+    if (entry) removeStartingPack(entry.id)
+    return
+  }
 
   removeEntityFromBundle(itemId, props.bundleId)
 
@@ -1281,73 +1294,6 @@ onUnmounted(() => {
   color: #94a3b8;
 }
 
-/* Starting staff packs */
-.pack-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.pack-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 6px 3px 8px;
-  border: 1px solid #bae6fd;
-  background: #f0f9ff;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #0c4a6e;
-}
-
-.pack-chip.is-broken {
-  border-color: #fca5a5;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.pack-dossier {
-  color: #a16207;
-  cursor: pointer;
-}
-
-.pack-dossier:hover {
-  text-decoration: underline;
-}
-
-.pack-tokens {
-  color: #64748b;
-  font-size: 11px;
-}
-
-.pack-remove {
-  border: none;
-  background: none;
-  color: #94a3b8;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-}
-
-.pack-remove:hover {
-  color: #dc2626;
-}
-
-.pack-add {
-  font-size: 12px;
-  padding: 3px 6px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 6px;
-  background: white;
-  color: #64748b;
-}
-
-.pack-empty {
-  font-size: 12px;
-  color: #94a3b8;
-}
 
 /* Infrastructure slots */
 .infrastructure-row {

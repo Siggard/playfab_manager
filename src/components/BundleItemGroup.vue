@@ -166,8 +166,11 @@ function handleDrop(event) {
   const itemId = event.dataTransfer.getData('itemId')
   const itemClass = event.dataTransfer.getData('itemClass')
 
-  // Only accept items of matching type
-  if (itemClass === props.type) {
+  // Only accept items of matching type; personal connections also take a
+  // staff pack or its Dossier (the focus view routes them into staff_packs)
+  const connectionDrop = props.type === 'personal_connection' &&
+    (itemClass === 'staff_pack' || itemClass === 'dossier')
+  if (itemClass === props.type || connectionDrop) {
     emit('add-item', itemId)
   }
 }
