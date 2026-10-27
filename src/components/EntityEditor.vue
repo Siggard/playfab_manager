@@ -225,6 +225,39 @@
           :item-id="form.ItemId"
         />
 
+        <!-- Tactic feature: how many matches switch a learned feature on; edits the JSON below -->
+        <div v-if="form.ItemClass === 'feature_tactic'" class="form-group tactic-feature-fields">
+          <label>
+            Свойство тактики
+            <span class="label-hint">поля меняют Custom Data ниже</span>
+          </label>
+          <div class="tf-row">
+            <span class="tf-label">Матчей для включения</span>
+            <input
+              type="number"
+              min="1"
+              class="tf-num"
+              :value="tacticFeature.matches ?? ''"
+              placeholder="1"
+              @change="setLearnMatches($event.target.value)"
+            />
+            <span class="tf-note">сыграть этой тактикой после недель тренера, чтобы выученное свойство заработало</span>
+          </div>
+          <ul v-if="tacticFeatureIssues.length > 0" class="tf-issues">
+            <li v-for="(issue, i) in tacticFeatureIssues" :key="i" :class="issue.severity">
+              {{ issue.message }}
+              <button
+                v-if="tacticFeature.shape === 'legacy'"
+                type="button"
+                class="tf-btn"
+                @click="setLearnMatches(1)"
+              >
+                Перевести в новый формат
+              </button>
+            </li>
+          </ul>
+        </div>
+
         <!-- Structured fields for a contract; edits the JSON below -->
         <div v-if="form.ItemClass === 'contract'" class="form-group">
           <label>
@@ -478,6 +511,7 @@ import EntityCard from './EntityCard.vue'
 import ContractFields from './ContractFields.vue'
 import ContractPanel from './ContractPanel.vue'
 import { contractSummary, findClubOfPlayer, parseData as parseContractData } from '../utils/contracts'
+import { parseTacticFeature, withLearnMatches, tacticFeatureIssues as tacticFeatureIssuesFor } from '../utils/tacticFeatures'
 
 const props = defineProps({
   entity: Object,
@@ -904,6 +938,19 @@ const idError = computed(() => {
   return null
 })
 
+// Tactic feature: { learn: { matches }, effects: [...] }; a legacy bare array is upgraded on edit
+const tacticFeature = computed(() =>
+  form.ItemClass === 'feature_tactic' ? parseTacticFeature(form.CustomData) : { shape: 'empty', matches: null }
+)
+const tacticFeatureIssues = computed(() =>
+  form.ItemClass === 'feature_tactic'
+    ? tacticFeatureIssuesFor({ ItemClass: 'feature_tactic', CustomData: form.CustomData })
+    : []
+)
+function setLearnMatches(value) {
+  form.CustomData = JSON.stringify(withLearnMatches(form.CustomData, value), null, 2)
+}
+
 const customDataError = computed(() => {
   if (!form.CustomData || form.CustomData.trim() === '') return null
   if (!isValidJSON(form.CustomData)) {
@@ -1229,6 +1276,66 @@ function handleDuplicate() {
   border-color: #fca5a5;
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.tactic-feature-fields {
+  background: #faf5ff;
+  border: 1px solid #d8b4fe;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.tf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tf-label {
+  font-size: 13px;
+  color: #475569;
+}
+
+.tactic-feature-fields input.tf-num {
+  width: 72px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.tf-note {
+  font-size: 12px;
+  color: #64748b;
+  flex: 1 1 240px;
+}
+
+.tf-issues {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.tf-issues li.error {
+  color: #b91c1c;
+}
+
+.tf-issues li.warning {
+  color: #b45309;
+}
+
+.tf-btn {
+  margin-left: 8px;
+  padding: 3px 8px;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  background: white;
+  color: #6d28d9;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tf-btn:hover {
+  background: #ede9fe;
 }
 
 .label-hint {

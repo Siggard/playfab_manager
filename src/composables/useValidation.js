@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { usePlayFabData } from './usePlayFabData'
 import { hiringIssuesForEntity } from '../utils/hiring'
 import { contractIssuesForEntity } from '../utils/contracts'
+import { tacticFeatureIssues } from '../utils/tacticFeatures'
 
 // Hiring board classes report several problems at once; one rule per severity
 function hiringRule(severity) {
@@ -26,6 +27,21 @@ function contractRule(severity) {
     message: 'Player contract',
     check: (item, allItems) => {
       const messages = contractIssuesForEntity(item, allItems)
+        .filter(i => i.severity === severity)
+        .map(i => i.message)
+      return messages.length > 0 ? { message: messages.join('; ') } : null
+    }
+  }
+}
+
+// Tactic features must be { learn: { matches >= 1 }, effects: [...] }
+function tacticFeatureRule(severity) {
+  return {
+    id: `tactic_feature_${severity}`,
+    severity,
+    message: 'Tactic feature format',
+    check: (item) => {
+      const messages = tacticFeatureIssues(item)
         .filter(i => i.severity === severity)
         .map(i => i.message)
       return messages.length > 0 ? { message: messages.join('; ') } : null
@@ -168,7 +184,9 @@ const validationRules = [
   hiringRule('error'),
   hiringRule('warning'),
   contractRule('error'),
-  contractRule('warning')
+  contractRule('warning'),
+  tacticFeatureRule('error'),
+  tacticFeatureRule('warning')
 ]
 
 export function useValidation() {

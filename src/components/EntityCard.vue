@@ -39,6 +39,9 @@
         <span v-if="contractBadge" class="stat contract" :class="{ missing: contractBadge.missing }" :title="contractBadge.title">
           📝 {{ contractBadge.text }}
         </span>
+        <span v-if="learnBadge" class="stat learn" :class="{ legacy: learnBadge.legacy }" :title="learnBadge.title">
+          🎯 {{ learnBadge.text }}
+        </span>
       </div>
       <!-- Player tags -->
       <div class="player-tags" v-if="displayInfo.playerTags">
@@ -111,6 +114,7 @@ import { useImageManager } from '../composables/useImageManager'
 import { useValidation } from '../composables/useValidation'
 import { usePlayFabData } from '../composables/usePlayFabData'
 import { contractSummary, findClubOfPlayer, parseData as parseContractData } from '../utils/contracts'
+import { parseTacticFeature } from '../utils/tacticFeatures'
 
 const props = defineProps({
   entity: {
@@ -157,9 +161,20 @@ function formatStyle(style) {
   // Convert snake_case to readable format
   return style.replace(/_/g, ' ')
 }
+// Tactic feature: matches to play before a learned feature switches on
+const learnBadge = computed(() => {
+  if (props.entity.ItemClass !== 'feature_tactic') return null
+  const parsed = parseTacticFeature(props.entity.CustomData)
+  if (parsed.shape === 'legacy') return { text: 'старый формат', title: 'Голый массив эффектов: игра возьмёт 1 матч', legacy: true }
+  if (parsed.shape !== 'object') return null
+  const n = parsed.matches
+  const word = n === 1 ? 'матч' : (n >= 2 && n <= 4 ? 'матча' : 'матчей')
+  return { text: Number.isInteger(n) ? `${n} ${word}` : '? матчей', title: 'Матчей для включения выученного свойства', legacy: false }
+})
+
 const hasStats = computed(() => {
   const info = displayInfo.value
-  return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null || !!contractBadge.value
+  return info.power || info.level || info.balance || info.position || info.salary || info.slots || info.bonusLevel !== null || !!contractBadge.value || !!learnBadge.value
 })
 
 const showsDescription = computed(() =>
@@ -373,6 +388,16 @@ onUnmounted(() => {
 .stat.contract.missing {
   background: #fee2e2;
   color: #b91c1c;
+}
+
+.stat.learn {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.stat.learn.legacy {
+  background: #fef3c7;
+  color: #b45309;
 }
 
 /* Tactic slots */
