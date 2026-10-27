@@ -246,14 +246,6 @@
           <ul v-if="tacticFeatureIssues.length > 0" class="tf-issues">
             <li v-for="(issue, i) in tacticFeatureIssues" :key="i" :class="issue.severity">
               {{ issue.message }}
-              <button
-                v-if="tacticFeature.shape === 'legacy'"
-                type="button"
-                class="tf-btn"
-                @click="setLearnMatches(1)"
-              >
-                Перевести в новый формат
-              </button>
             </li>
           </ul>
         </div>
@@ -1321,21 +1313,6 @@ function handleDuplicate() {
 
 .tf-issues li.warning {
   color: #b45309;
-}
-
-.tf-btn {
-  margin-left: 8px;
-  padding: 3px 8px;
-  border: 1px solid #c4b5fd;
-  border-radius: 6px;
-  background: white;
-  color: #6d28d9;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tf-btn:hover {
-  background: #ede9fe;
 }
 
 .label-hint {

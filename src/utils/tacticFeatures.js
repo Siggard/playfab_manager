@@ -43,7 +43,7 @@ export function tacticFeatureIssues(entity) {
   if (parsed.shape === 'legacy') {
     return [{
       severity: 'warning',
-      message: 'Старый формат: голый массив эффектов — игра возьмёт learn.matches = 1. Задайте число матчей, редактор перепишет в новый формат'
+      message: 'Старый формат: голый массив эффектов — игра возьмёт learn.matches = 1'
     }]
   }
   const issues = []
